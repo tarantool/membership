@@ -1,10 +1,10 @@
 # Membership library for Tarantool based on a gossip protocol
 
-This library helps build a mesh from multiple tarantool instances. The
+This library builds a mesh from multiple tarantool instances. The
 mesh monitors itself, helps members discover everyone else and get
 notified about their status changes with low latency.
 
-This library is built upon the ideas from consul, or, more precisely,
+It is built upon the ideas from consul, or, more precisely,
 the [SWIM](http://www.cs.cornell.edu/~asdas/research/dsn02-SWIM.pdf)
 algorithm.
 
