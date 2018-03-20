@@ -6,117 +6,100 @@ local log = require 'log'
 local fiber = require 'fiber'
 local clock = require 'clock'
 local json = require 'json'
+local checks = require('checks')
 
-local PROTOCOL_PERIOD_SECONDS = 1
+local PROTOCOL_PERIOD_SECONDS = 1.000 -- denoted as `T'` in SWIM paper
+local ACK_TIMEOUT_SECONDS = 0.200 -- ack timeout
 local ANTI_ENTROPY_PERIOD_SECONDS = 10
 local ACK_EXPIRE_SECONDS = 10
 
 local SUSPECT_TIMEOUT_SECONDS = 3
-local NUM_FAILURE_DETECTION_SUBGROUPS = 3
+local NUM_FAILURE_DETECTION_SUBGROUPS = 3 -- denoted as `k` in SWIM paper
 
 local EVENT_PIGGYBACK_LIMIT = 10
 
-local STATUS_ALIVE = 1
-local STATUS_SUSPECT = 2
-local STATUS_DEAD = 3
+local function _table_turn_out(tbl)
+    local ret = {}
+    for i, v in ipairs(tbl) do
+        ret[v] = i
+    end
+    return ret
+end
+local STATUS_NAMES = {'alive', 'suspect', 'dead'}
+local MESSAGE_NAMES = {'ping', 'ack', 'indirect_ping'}
+local STATUS = _table_turn_out(STATUS_NAMES)
+local MESSAGE = _table_turn_out(MESSAGE_NAMES)
 
-local EVENT_ALIVE = 1
-local EVENT_SUSPECT = 2
-local EVENT_DEAD = 3
+local STATUS_ALIVE = STATUS.alive
+local STATUS_SUSPECT = STATUS.suspect
+local STATUS_DEAD = STATUS.dead
 
-local MESSAGE_PING = 1
-local MESSAGE_INDIRECT_PING = 2
-local MESSAGE_ACK = 3
+local EVENT_ALIVE = STATUS.alive
+local EVENT_SUSPECT = STATUS.suspect
+local EVENT_DEAD = STATUS.dead
 
--- uri, status, incarnation
-vars:new('members', {})
+local MESSAGE_PING = MESSAGE.ping
+local MESSAGE_INDIRECT_PING = MESSAGE.indirect_ping
+local MESSAGE_ACK = MESSAGE.ack
+
+local function _table_count(tbl)
+    local count = 0
+    for _ in pairs(vars.members) do
+        count = count + 1
+    end
+    return count
+end
+
+vars:new('members', {
+    -- [uri] = {
+    --     status = number,
+    --     incarnation = number,
+    --     timestamp = time64,
+    -- }
+})
+vars:new('events', {
+    -- [uri] = {
+    --     event_type = number,
+    --     uri = string,
+    --     ttl = number,
+    --     incarnation = number,
+    -- }
+})
 
 vars:new('shuffled_members', {})
 vars:new('shuffled_member', 1)
-
-local events = {}
 
 local suspects = {}
 
 local indirect_ping_requests = {}
 
-local message_channel = fiber.channel(1000)
-
 vars:new('advertise_uri', nil)
-
-local on_connected = nil
-
-local on_disconnected = nil
-
-local ack_cond = fiber.cond()
-
-local ack_messages = {}
-
-local function status_to_string(status)
-    if status == STATUS_ALIVE then
-        return "alive"
-    elseif status == STATUS_SUSPECT then
-        return "suspect"
-    elseif status == STATUS_DEAD then
-        return "dead"
-    end
-end
+vars:new('message_channel', fiber.channel(1000))
+vars:new('ack_condition', fiber.cond())
+vars:new('ack_messages', {})
 
 local function member_pairs()
     local res = {}
 
     for uri, member in pairs(vars.members) do
-        res[uri] = {uri = uri,
-                    status = status_to_string(member.status),
-                    incarnation = member.incarnation}
+        res[uri] = {
+            uri = uri,
+            status = STATUS_NAMES[member.status],
+            incarnation = member.incarnation,
+        }
     end
 
     return pairs(res)
 end
 
-local function shuffle(list)
-    local indices = {}
-    for i = 1, #list do
-        indices[#indices+1] = i
-    end
-
-    local shuffled = {}
-    for _ = 1, #list do
-        local index = math.random(#indices)
-        local value = list[indices[index]]
-
-        table.remove(indices, index)
-        shuffled[#shuffled+1] = value
-    end
-
-    return shuffled
-end
-
-local function member_exists(uri)
-    return vars.members[uri] ~= nil
-end
-
-local function add_member(uri, inc)
+local function add_member(uri, incarnation)
     log.info("Adding new member: %s", uri)
-    if inc == nil then
-        inc = 0
-    end
 
-    if on_connected ~= nil then
-        on_connected(uri)
-    end
-
-    vars.members[uri] = {status=STATUS_ALIVE, incarnation=inc}
-end
-
-local function member_count()
-    local count = 0
-
-    for _, v in pairs(vars.members) do
-        count = count + 1
-    end
-
-    return count
+    vars.members[uri] = {
+        status = STATUS_ALIVE,
+        incarnation = incarnation or 0,
+    }
+    -- TODO callback
 end
 
 local function get_incarnation(uri)
@@ -131,13 +114,7 @@ local function set_status(uri, status)
     local old_status = vars.members[uri].status
     vars.members[uri].status = status
 
-    if old_status ~= STATUS_DEAD and status == STATUS_DEAD and on_disconnected ~= nil then
-        on_disconnected(uri)
-    end
-
-    if old_status == STATUS_DEAD and status == STATUS_ALIVE and on_connected ~= nil then
-        on_connected(uri)
-    end
+    -- TODO callback
 end
 
 local function get_status(uri)
@@ -152,47 +129,18 @@ local function get_timestamp(uri)
     return vars.members[uri].timestamp
 end
 
-local function get_membership_table()
-    return vars.members
-end
-
-local function status_to_str(status)
-    if status == STATUS_ALIVE then
-        return "alive"
-    elseif status == STATUS_DEAD then
-        return "dead"
-    elseif status == STATUS_SUSPECT then
-        return "suspect"
-    else
-        error(string.format("unknown status: %d", status))
-    end
-end
-
-local function dump_membership_table()
-    local res = ""
-    for uri, val in pairs(vars.members) do
-        res = res .. string.format("%s\t%s\t%s\n",
-                                   uri,
-                                   status_to_str(val.status),
-                                   val.incarnation)
-    end
-    return res
-end
-
 local function select_next_member()
     if vars.shuffled_member > #vars.shuffled_members then
-        local tbl = get_membership_table()
-        --log.info("membership: " .. json.encode(tbl))
-
-        for k, _ in pairs(tbl) do
-            if k ~= vars.advertise_uri then
-                table.insert(vars.shuffled_members, k)
+        local shuffled = {}
+        for uri, _ in pairs(vars.members) do
+            if uri ~= vars.advertise_uri then
+                table.insert(shuffled, math.random(#shuffled+1), uri)
             end
         end
-        vars.shuffled_members = shuffle(vars.shuffled_members)
+        vars.shuffled_members = shuffled
         vars.shuffled_member = 1
 
-        if #vars.shuffled_members == 0 then
+        if #shuffled == 0 then
             return nil
         end
     end
@@ -219,68 +167,69 @@ local function select_random_live_member()
 end
 
 local function unpack_event(event)
-    return {event_type = event[1],
-            uri = event[2],
-            ttl = event[3],
-            incarnation = event[4]}
+    return {
+        event_type = event[1],
+        uri = event[2],
+        ttl = event[3],
+        incarnation = event[4],
+    }
 end
 
 local function pack_event(event)
-    return {event.event_type,
-            event.uri,
-            event.ttl,
-            event.incarnation}
+    return {
+        event.event_type,
+        event.uri,
+        event.ttl,
+        event.incarnation,
+    }
 end
 
-local function send_message(uri, msg, extra_event)
+local function send_message(uri, msg_type, msg_data, extra_event)
+    checks("string", "number", "?", "?")
     local conn, err = pool.connect(uri)
-    local rc
-    local evts = {}
-    local expired = {}
-
-    local count = 0
-
-    if extra_event then
-        table.insert(evts, pack_event(extra_event))
-        count = count + 1
+    if err then
+        return false, err
     end
 
-    for uri, event in pairs(events) do
-        if count > EVENT_PIGGYBACK_LIMIT then
+    local events_to_send = {}
+    local expired = {}
+
+    if extra_event then
+        table.insert(events_to_send, pack_event(extra_event))
+    end
+
+    for _, event in pairs(vars.events) do
+        if #events_to_send > EVENT_PIGGYBACK_LIMIT then
             break
         end
 
-        if not extra_event or extra_event.uri ~= uri then
+        if extra_event and extra_event.uri == event.uri then
+            -- it has already been sent 10 SLoCs before
+            -- continue
+        else
             event.ttl = event.ttl - 1
             if event.ttl <= 0 then
-                table.insert(expired, uri)
+                table.insert(expired, event.uri)
             else
-                table.insert(evts, pack_event(event))
+                table.insert(events_to_send, pack_event(event))
             end
-
-            count = count + 1
         end
     end
 
     for _, uri in ipairs(expired) do
         log.info("expiring event for %s", uri)
-        events[uri] = nil
+        vars.events[uri] = nil
     end
 
+    local ok, err = pcall(
+        conn.call,
+        conn,
+        'membership_recv_message',
+        {vars.advertise_uri, msg_type, msg_data, events_to_send},
+        {timeout=PROTOCOL_PERIOD_SECONDS}
+    )
 
-    if err ~= nil then
-        return nil, err
-    end
-
-    rc, err = pcall(conn.call,
-                    conn,
-                    'membership_recv_message',
-                    {vars.advertise_uri, evts, msg},
-                    {timeout=PROTOCOL_PERIOD_SECONDS})
-
-    if not rc then
-        return nil, err
-    end
+    return ok, err
 end
 
 local function handle_event(event)
@@ -292,44 +241,44 @@ local function handle_event(event)
             local incarnation = math.max(event.incarnation, get_incarnation(vars.advertise_uri)) + 1
             set_incarnation(vars.advertise_uri, incarnation)
 
-            local ttl = member_count()
-
-            events[uri] = {event_type = EVENT_ALIVE,
-                           uri = vars.advertise_uri,
-                           ttl = ttl,
-                           incarnation = incarnation}
+            vars.events[uri] = {
+                event_type = EVENT_ALIVE,
+                uri = vars.advertise_uri,
+                ttl = _table_count(vars.members),
+                incarnation = incarnation,
+            }
         end
 
         return
     end
 
-    if events[uri] == nil then
-        events[uri] = event
+    if vars.events[uri] == nil then
+        vars.events[uri] = event
     else
-        local old_event = events[uri]
+        local old_event = vars.events[uri]
 
         if event.event_type == EVENT_ALIVE then
             if old_event.event_type == EVENT_ALIVE and event.incarnation > old_event.incarnation then
-                events[uri] = event
+                vars.events[uri] = event
             elseif old_event.event_type == EVENT_SUSPECT and event.incarnation > old_event.incarnation then
-                events[uri] = event
+                vars.events[uri] = event
             end
         elseif event.event_type == EVENT_SUSPECT then
             if old_event.event_type == EVENT_ALIVE and event.incarnation >= old_event.incarnation then
-                events[uri] = event
+                vars.events[uri] = event
             elseif old_event.event_type == EVENT_SUSPECT and event.incarnation > old_event.incarnation then
-                events[uri] = event
+                vars.events[uri] = event
             end
         elseif event.event_type == EVENT_DEAD then
             if old_event.event_type == EVENT_ALIVE then
-                events[uri] = event
+                vars.events[uri] = event
             elseif old_event.event_type == EVENT_SUSPECT then
-                events[uri] = event
+                vars.events[uri] = event
             end
         end
     end
 
-    if events[uri] ~= event then
+    if vars.events[uri] ~= event then
         return
     end
 
@@ -356,68 +305,50 @@ local function handle_event(event)
     end
 end
 
-local function send_ping(uri, ts)
+local function send_ping(uri, timestamp)
     local extra_event = nil
-
-    if get_status(uri) == STATUS_SUSPECT then
-        extra_event = {event_type = EVENT_SUSPECT,
-                       uri = uri,
-                       ttl = member_count(),
-                       incarnation = get_incarnation(uri)}
-    elseif get_status(uri) == STATUS_DEAD then
-        extra_event = {event_type = EVENT_DEAD,
-                       uri = uri,
-                       ttl = member_count(),
-                       incarnation = get_incarnation(uri)}
+    local member = vars.members[uri]
+    if member.status ~= STATUS_ALIVE then
+        extra_event = {
+            event_type = member.status,
+            uri = uri,
+            ttl = _table_count(vars.members), -- TODO this line is useless
+            incarnation = member.incarnation,
+        }
     end
 
-
-    return send_message(uri, {MESSAGE_PING, ts}, extra_event)
+    return send_message(uri, MESSAGE_PING, timestamp, extra_event)
 end
 
-local function handle_message()
+local function handle_message(sender_uri, msg_type, msg_data, new_events)
+
+    if not vars.members[sender_uri] then
+        add_member(sender_uri)
+    end
+
+    for _, event in ipairs(new_events) do
+        handle_event(unpack_event(event))
+    end
+
+    if msg_type == MESSAGE_PING then
+        send_message(sender_uri, MESSAGE_ACK, msg_data)
+    elseif msg_type == MESSAGE_INDIRECT_PING then
+
+    elseif msg_type == MESSAGE_ACK then
+        table.insert(vars.ack_messages, {sender_uri, msg_data})
+        vars.ack_condition:broadcast()
+    end
+end
+
+local function handle_message_loop()
     while true do
-        local arg = message_channel:get()
-        local sender_uri = arg[1]
-        local evts = arg[2]
-        local msg = arg[3]
-
-        local msg_type = msg[1]
-
-        if not member_exists(sender_uri) then
-            add_member(sender_uri)
-        end
-
-        for _, event in ipairs(evts) do
-            handle_event(unpack_event(event))
-        end
-
-        if msg_type == MESSAGE_PING then
-            local ts = msg[2]
-            --log.info("ping from " .. sender_uri)
-            send_message(sender_uri, {MESSAGE_ACK, ts})
-        elseif msg_type == MESSAGE_INDIRECT_PING then
-
-        elseif msg_type == MESSAGE_ACK then
-            local ts = msg[2]
-            --log.info("ack from " .. sender_uri)
-
-            table.insert(ack_messages, {sender_uri, ts})
-            ack_cond:broadcast()
-        end
-
+        local message = vars.message_channel:get()
+        handle_message(unpack(message))
     end
 end
 
-
-function membership_recv_message(sender_uri, evts, msg)
-
-    --if not is_known_host(sender_uri) then
-        -- TODO: add "ALIVE" message
-    --end
-
-    message_channel:put({sender_uri, evts, msg})
-
+function membership_recv_message(sender_uri, typ, data, new_events)
+    vars.message_channel:put({sender_uri, typ, data, new_events})
 end
 
 
@@ -436,48 +367,57 @@ end
 
 
 local function wait_ack(uri, timestamp)
-    local now = clock.time64()
-    local timediff = PROTOCOL_PERIOD_SECONDS * 10^9
+    local now
+    local timeout = ACK_TIMEOUT_SECONDS * 10^9
+    local deadline = timestamp + timeout
+    repeat
+        now = fiber.time64()
 
-    while (now - timestamp) < timediff do
-        for _, v in ipairs(ack_messages) do
-            if v[1] == uri and v[2] >= timestamp then
+        for _, msg in ipairs(vars.ack_messages) do
+            local ack_uri, ack_timestamp = unpack(msg)
+            if ack_uri == uri and ack_timestamp >= timestamp then
                 return true
             end
         end
-
-        ack_cond:wait(tonumber(timestamp + timediff - now) / 10^9)
-        now = clock.time64()
-    end
+    until (now >= deadline) or not vars.ack_condition:wait(tonumber(deadline - now) / 10^9)
 
     return false
 end
 
 local function mark_alive(uri)
-    if get_status(uri) ~= STATUS_ALIVE then
-        if events[uri] == nil or events[uri].incarnation < get_incarnation(uri) then
-            set_status(uri, STATUS_ALIVE)
-            set_timestamp(uri, clock.time64())
+    if get_status(uri) == STATUS_ALIVE then
+        -- do nothing
+        return
+    end
 
-            events[uri] = {event_type = EVENT_ALIVE,
-                           uri = uri,
-                           ttl = member_count(),
-                           incarnation = get_incarnation(uri)}
-        end
+    if vars.events[uri] == nil or vars.events[uri].incarnation < get_incarnation(uri) then
+        set_status(uri, STATUS_ALIVE)
+        set_timestamp(uri, clock.time64())
+
+        vars.events[uri] = {
+            event_type = EVENT_ALIVE,
+            uri = uri,
+            ttl = _table_count(vars.members),
+            incarnation = get_incarnation(uri),
+        }
     end
 end
 
 local function mark_suspect(uri)
-    if get_status(uri) == STATUS_ALIVE then
-        if events[uri] == nil or events[uri].incarnation <= get_incarnation(uri) then
-            set_status(uri, STATUS_SUSPECT)
-            set_timestamp(uri, clock.time64())
+    if get_status(uri) ~= STATUS_ALIVE then
+        return
+    end
 
-            events[uri] = {event_type = EVENT_SUSPECT,
-                           uri = uri,
-                           ttl = member_count(),
-                           incarnation = get_incarnation(uri)}
-        end
+    if vars.events[uri] == nil or vars.events[uri].incarnation <= get_incarnation(uri) then
+        set_status(uri, STATUS_SUSPECT)
+        set_timestamp(uri, clock.time64())
+
+        vars.events[uri] = {
+            event_type = EVENT_SUSPECT,
+            uri = uri,
+            ttl = _table_count(vars.members),
+            incarnation = get_incarnation(uri),
+        }
     end
 end
 
@@ -492,77 +432,84 @@ local function protocol_step()
         return
     end
 
-    local ts = clock.time64()
-    local res, err = send_ping(uri, ts)
+    local ts = fiber.time64()
+    local ok, _ = send_ping(uri, ts)
 
-    if err == nil and wait_ack(uri, ts) then
+    if ok and wait_ack(uri, ts) then
         mark_alive(uri)
         return
     end
 
-    if get_status(uri) == STATUS_DEAD then
+    if vars.members[uri].status == STATUS_DEAD then
+        -- still dead, do nothing
         return
     end
 
-    ts = clock.time64()
-    for _=1,NUM_FAILURE_DETECTION_SUBGROUPS do
+
+    local ts = fiber.time64()
+    for _ = 1, NUM_FAILURE_DETECTION_SUBGROUPS do
         local through_uri = select_random_live_member(uri)
 
         if through_uri == nil then
             log.error("No live members for indirect ping")
         else
             --log.info("through: " .. through_uri)
-            send_message(through_uri, {MESSAGE_INDIRECT_PING, uri})
+            send_message(through_uri, MESSAGE_INDIRECT_PING, uri)
         end
     end
 
     if wait_ack(uri, ts) then
         mark_alive(uri)
         return
+    else
+        log.info("Couldn't reach node: %s", uri)
+        mark_suspect(uri)
+        return
     end
-
-    log.info("Couldn't reach node: %s", uri)
-
-    mark_suspect(uri)
 end
 
 local function expire()
     for k,_ in pairs(vars.members) do
         if get_status(k) == STATUS_SUSPECT and
            get_timestamp(k) - clock.time64() > SUSPECT_TIMEOUT_SECONDS * 10^9 then
-               set_status(k, STATUS_DEAD)
-               set_timestamp(k, clock.time64())
-               events[k] = {event_type = EVENT_DEAD,
-                            uri = k,
-                            ttl = member_count(),
-                            incarnation = get_incarnation(k)}
-               log.info("Suspected node is unreachable. Marking as dead: '%s'", k)
+                set_status(k, STATUS_DEAD)
+                set_timestamp(k, clock.time64())
+                vars.events[k] = {
+                    event_type = EVENT_DEAD,
+                    uri = k,
+                    ttl = _table_count(vars.members),
+                    incarnation = get_incarnation(k),
+                }
+                log.info("Suspected node is unreachable. Marking as dead: '%s'", k)
         end
     end
 
-    for i=#ack_messages,1,-1 do
-        local uri = ack_messages[i][1]
-        local ts = ack_messages[i][2]
+    for i=#vars.ack_messages,1,-1 do
+        local uri = vars.ack_messages[i][1]
+        local ts = vars.ack_messages[i][2]
         local now = clock.time64()
 
         if now - ts > ACK_EXPIRE_SECONDS * 10^9 then
-            table.remove(ack_messages, i)
+            table.remove(vars.ack_messages, i)
         end
     end
 end
 
 local function protocol_loop()
     while true do
-        protocol_step()
+        local t1 = fiber.time()
+        protocol_step() -- yields inside
         expire()
+        local t2 = fiber.time()
 
-        fiber.sleep(PROTOCOL_PERIOD_SECONDS)
+        -- sleep till next period
+        fiber.sleep(t1 + PROTOCOL_PERIOD_SECONDS - t2)
     end
 end
 
 function membership_recv_anti_entropy(remote_tbl)
     for uri, val in pairs(remote_tbl) do
-        if not member_exists(uri) then
+        if not vars.members[uri] then
             add_member(uri, val.incarnation)
             set_status(uri, val.status)
         elseif get_incarnation(uri) < remote_tbl[uri].incarnation then
@@ -573,7 +520,7 @@ function membership_recv_anti_entropy(remote_tbl)
 
     local ret = {}
 
-    local local_tbl = get_membership_table()
+    local local_tbl = vars.members
     for uri, val in pairs(local_tbl) do
         if remote_tbl[uri] == nil then
             ret[uri] = val
@@ -595,31 +542,28 @@ local function anti_entropy_step()
     --log.info("anti entropy sync with: " .. tostring(uri))
 
     local conn, err = pool.connect(uri)
-    local rc
 
     if err ~= nil then
         log.error("Failed to do anti-entropy sync: %s", err)
         return false, err
     end
 
-    local local_tbl = get_membership_table()
+    local ok, remote_tbl = pcall(
+        conn.call,
+        conn,
+        'membership_recv_anti_entropy',
+        {vars.members},
+        {timeout=PROTOCOL_PERIOD_SECONDS}
+    )
 
-    local res
-    rc, res = pcall(conn.call,
-                    conn,
-                    'membership_recv_anti_entropy',
-                    {local_tbl},
-                    {timeout=PROTOCOL_PERIOD_SECONDS})
-
-    if not rc then
-        log.error("Failed to do anti-entropy sync: %s", res)
-        return false, res
+    if not ok then
+        local err = remote_tbl
+        log.error("Failed to do anti-entropy sync: %s", err)
+        return false, err
     end
 
-    local remote_tbl = res
-
     for uri, val in pairs(remote_tbl) do
-        if not member_exists(local_tbl) then
+        if not vars.members[uri] then
             add_member(uri, val.incarnation)
             set_status(uri, val.status)
         elseif get_incarnation(uri) < val.incarnation then
@@ -651,33 +595,17 @@ local function anti_entropy_loop()
     end
 end
 
-local function init(uri,
-                    bootstrap,
-                    on_connected_callback,
-                    on_disconnected_callback)
-    if type(bootstrap) ~= "table" then
-        bootstrap = {bootstrap}
+local function init(advertise_uri)
+    checks("string")
+    vars.advertise_uri = advertise_uri
+    
+    if not vars.members[advertise_uri] then
+        add_member(advertise_uri)
     end
-
-    vars.advertise_uri = uri
-    on_connected = on_connected_callback
-    on_disconnected = on_disconnected_callback
-
-    if not member_exists(uri) then
-        add_member(uri)
-    end
-
-    for _, bootstrap_uri in ipairs(bootstrap) do
-        if bootstrap_uri ~= uri and not member_exists(bootstrap_uri) then
-            add_member(bootstrap_uri)
-        end
-    end
-
-    log.info(dump_membership_table())
 
     fiber.create(anti_entropy_loop)
     fiber.create(protocol_loop)
-    fiber.create(handle_message)
+    fiber.create(handle_message_loop)
 end
 
 local function get_advertise_uri()
@@ -686,4 +614,9 @@ end
 
 fiber.create(timeout_ping_requests)
 
-return {init=init, pairs=member_pairs, get_advertise_uri=get_advertise_uri}
+return {
+    init = init,
+    pairs = member_pairs,
+    add_member = add_member,
+    get_advertise_uri = get_advertise_uri
+}
