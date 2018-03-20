@@ -1,6 +1,7 @@
 #!/usr/bin/env tarantool
 
-local pool = require 'pool'
+local pool = require('ib-common.pool')
+local vars = require('ib-common.vars').new('membership')
 local log = require 'log'
 local fiber = require 'fiber'
 local clock = require 'clock'
@@ -28,10 +29,10 @@ local MESSAGE_INDIRECT_PING = 2
 local MESSAGE_ACK = 3
 
 -- uri, status, incarnation
-local members = {}
+vars:new('members', {})
 
-local shuffled_members = {}
-local shuffled_member = 1
+vars:new('shuffled_members', {})
+vars:new('shuffled_member', 1)
 
 local events = {}
 
@@ -41,7 +42,11 @@ local indirect_ping_requests = {}
 
 local message_channel = fiber.channel(1000)
 
-local advertise_uri = nil
+vars:new('advertise_uri', nil)
+
+local on_connected = nil
+
+local on_disconnected = nil
 
 local ack_cond = fiber.cond()
 
@@ -60,7 +65,7 @@ end
 local function member_pairs()
     local res = {}
 
-    for uri, member in pairs(members) do
+    for uri, member in pairs(vars.members) do
         res[uri] = {uri = uri,
                     status = status_to_string(member.status),
                     incarnation = member.incarnation}
@@ -88,7 +93,7 @@ local function shuffle(list)
 end
 
 local function member_exists(uri)
-    return members[uri] ~= nil
+    return vars.members[uri] ~= nil
 end
 
 local function add_member(uri, inc)
@@ -97,13 +102,17 @@ local function add_member(uri, inc)
         inc = 0
     end
 
-    members[uri] = {status=STATUS_ALIVE, incarnation=inc}
+    if on_connected ~= nil then
+        on_connected(uri)
+    end
+
+    vars.members[uri] = {status=STATUS_ALIVE, incarnation=inc}
 end
 
 local function member_count()
     local count = 0
 
-    for _, v in pairs(members) do
+    for _, v in pairs(vars.members) do
         count = count + 1
     end
 
@@ -111,31 +120,40 @@ local function member_count()
 end
 
 local function get_incarnation(uri)
-    return members[uri].incarnation
+    return vars.members[uri].incarnation
 end
 
 local function set_incarnation(uri, value)
-    members[uri].incarnation = value
+    vars.members[uri].incarnation = value
 end
 
 local function set_status(uri, status)
-    members[uri].status = status
+    local old_status = vars.members[uri].status
+    vars.members[uri].status = status
+
+    if old_status ~= STATUS_DEAD and status == STATUS_DEAD and on_disconnected ~= nil then
+        on_disconnected(uri)
+    end
+
+    if old_status == STATUS_DEAD and status == STATUS_ALIVE and on_connected ~= nil then
+        on_connected(uri)
+    end
 end
 
 local function get_status(uri)
-    return members[uri].status
+    return vars.members[uri].status
 end
 
 local function set_timestamp(uri, timestamp)
-    members[uri].timestamp = timestamp
+    vars.members[uri].timestamp = timestamp
 end
 
 local function get_timestamp(uri)
-    return members[uri].timestamp
+    return vars.members[uri].timestamp
 end
 
 local function get_membership_table()
-    return members
+    return vars.members
 end
 
 local function status_to_str(status)
@@ -152,7 +170,7 @@ end
 
 local function dump_membership_table()
     local res = ""
-    for uri, val in pairs(members) do
+    for uri, val in pairs(vars.members) do
         res = res .. string.format("%s\t%s\t%s\n",
                                    uri,
                                    status_to_str(val.status),
@@ -162,32 +180,32 @@ local function dump_membership_table()
 end
 
 local function select_next_member()
-    if shuffled_member > #shuffled_members then
+    if vars.shuffled_member > #vars.shuffled_members then
         local tbl = get_membership_table()
         --log.info("membership: " .. json.encode(tbl))
 
         for k, _ in pairs(tbl) do
-            if k ~= advertise_uri then
-                table.insert(shuffled_members, k)
+            if k ~= vars.advertise_uri then
+                table.insert(vars.shuffled_members, k)
             end
         end
-        shuffled_members = shuffle(shuffled_members)
-        shuffled_member = 1
+        vars.shuffled_members = shuffle(vars.shuffled_members)
+        vars.shuffled_member = 1
 
-        if #shuffled_members == 0 then
+        if #vars.shuffled_members == 0 then
             return nil
         end
     end
 
-    local res = shuffled_members[shuffled_member]
-    shuffled_member = shuffled_member + 1
+    local res = vars.shuffled_members[vars.shuffled_member]
+    vars.shuffled_member = vars.shuffled_member + 1
     return res
 end
 
 local function select_random_live_member()
     local live = {}
 
-    for _, k in ipairs(shuffled_members) do
+    for _, k in ipairs(vars.shuffled_members) do
         if get_status(k) == STATUS_ALIVE then
             table.insert(live, k)
         end
@@ -257,7 +275,7 @@ local function send_message(uri, msg, extra_event)
     rc, err = pcall(conn.call,
                     conn,
                     'membership_recv_message',
-                    {advertise_uri, evts, msg},
+                    {vars.advertise_uri, evts, msg},
                     {timeout=PROTOCOL_PERIOD_SECONDS})
 
     if not rc then
@@ -268,16 +286,16 @@ end
 local function handle_event(event)
     local uri = event.uri
 
-    if advertise_uri == uri then
+    if vars.advertise_uri == uri then
         if event.event_type == EVENT_SUSPECT or event.event_type == EVENT_DEAD then
             log.info("refuting the rumor that we are dead")
-            local incarnation = math.max(event.incarnation, get_incarnation(advertise_uri)) + 1
-            set_incarnation(advertise_uri, incarnation)
+            local incarnation = math.max(event.incarnation, get_incarnation(vars.advertise_uri)) + 1
+            set_incarnation(vars.advertise_uri, incarnation)
 
             local ttl = member_count()
 
             events[uri] = {event_type = EVENT_ALIVE,
-                           uri = advertise_uri,
+                           uri = vars.advertise_uri,
                            ttl = ttl,
                            incarnation = incarnation}
         end
@@ -509,7 +527,7 @@ local function protocol_step()
 end
 
 local function expire()
-    for k,_ in pairs(members) do
+    for k,_ in pairs(vars.members) do
         if get_status(k) == STATUS_SUSPECT and
            get_timestamp(k) - clock.time64() > SUSPECT_TIMEOUT_SECONDS * 10^9 then
                set_status(k, STATUS_DEAD)
@@ -633,12 +651,17 @@ local function anti_entropy_loop()
     end
 end
 
-local function init(uri, bootstrap)
+local function init(uri,
+                    bootstrap,
+                    on_connected_callback,
+                    on_disconnected_callback)
     if type(bootstrap) ~= "table" then
         bootstrap = {bootstrap}
     end
 
-    advertise_uri = uri
+    vars.advertise_uri = uri
+    on_connected = on_connected_callback
+    on_disconnected = on_disconnected_callback
 
     if not member_exists(uri) then
         add_member(uri)
@@ -657,6 +680,10 @@ local function init(uri, bootstrap)
     fiber.create(handle_message)
 end
 
+local function get_advertise_uri()
+    return vars.advertise_uri
+end
+
 fiber.create(timeout_ping_requests)
 
-return {init=init, pairs=member_pairs}
+return {init=init, pairs=member_pairs, get_advertise_uri=get_advertise_uri}
