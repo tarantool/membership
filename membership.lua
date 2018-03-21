@@ -1,11 +1,10 @@
 #!/usr/bin/env tarantool
 
-local pool = require('ib-common.pool')
-local vars = require('ib-common.vars').new('membership')
-local log = require 'log'
-local fiber = require 'fiber'
-local clock = require 'clock'
-local json = require 'json'
+local log = require('log')
+local json = require('json')
+local pool = require('pool')
+local fiber = require('fiber')
+local clock = require('clock')
 local checks = require('checks')
 
 local PROTOCOL_PERIOD_SECONDS = 1.000 -- denoted as `T'` in SWIM paper
@@ -44,39 +43,40 @@ local MESSAGE_ACK = MESSAGE.ack
 
 local function _table_count(tbl)
     local count = 0
-    for _ in pairs(vars.members) do
+    for _ in pairs(tbl) do
         count = count + 1
     end
     return count
 end
 
-vars:new('members', {
+local vars = {}
+vars.members = {
     -- [uri] = {
     --     status = number,
     --     incarnation = number,
     --     timestamp = time64,
     -- }
-})
-vars:new('events', {
+}
+vars.events = {
     -- [uri] = {
     --     event_type = number,
     --     uri = string,
     --     ttl = number,
     --     incarnation = number,
     -- }
-})
+}
 
-vars:new('shuffled_members', {})
-vars:new('shuffled_member', 1)
+vars.shuffled_members = {}
+vars.shuffled_member = 1
 
 local suspects = {}
 
 local indirect_ping_requests = {}
 
-vars:new('advertise_uri', nil)
-vars:new('message_channel', fiber.channel(1000))
-vars:new('ack_condition', fiber.cond())
-vars:new('ack_messages', {})
+vars.advertise_uri = nil
+vars.message_channel = fiber.channel(1000)
+vars.ack_condition = fiber.cond()
+vars.ack_messages = {}
 
 local function member_pairs()
     local res = {}
@@ -343,7 +343,13 @@ end
 local function handle_message_loop()
     while true do
         local message = vars.message_channel:get()
-        handle_message(unpack(message))
+        -- handle_message(unpack(message))
+        local ok, res = xpcall(handle_message, debug.traceback, unpack(message))
+
+        if not ok then
+            log.error(res)
+            log.error(debug.traceback())
+        end
     end
 end
 
@@ -498,7 +504,14 @@ end
 local function protocol_loop()
     while true do
         local t1 = fiber.time()
-        protocol_step() -- yields inside
+        local ok, res = xpcall(protocol_step, debug.traceback)
+
+        if not ok then
+            log.error(res)
+            log.error(debug.traceback())
+
+        end
+
         expire()
         local t2 = fiber.time()
 
@@ -598,7 +611,7 @@ end
 local function init(advertise_uri)
     checks("string")
     vars.advertise_uri = advertise_uri
-    
+
     if not vars.members[advertise_uri] then
         add_member(advertise_uri)
     end
@@ -606,13 +619,13 @@ local function init(advertise_uri)
     fiber.create(anti_entropy_loop)
     fiber.create(protocol_loop)
     fiber.create(handle_message_loop)
+    fiber.create(timeout_ping_requests)
 end
 
 local function get_advertise_uri()
     return vars.advertise_uri
 end
 
-fiber.create(timeout_ping_requests)
 
 return {
     init = init,
