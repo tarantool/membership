@@ -4,7 +4,6 @@ local log = require('log')
 local json = require('json')
 local pool = require('pool')
 local fiber = require('fiber')
-local clock = require('clock')
 local checks = require('checks')
 
 local PROTOCOL_PERIOD_SECONDS = 1.000 -- denoted as `T'` in SWIM paper
@@ -24,6 +23,7 @@ local function _table_turn_out(tbl)
     end
     return ret
 end
+-- STATUS_NAMES are ordered according to override priority
 local STATUS_NAMES = {'alive', 'suspect', 'dead'}
 local MESSAGE_NAMES = {'ping', 'ack', 'indirect_ping'}
 local STATUS = _table_turn_out(STATUS_NAMES)
@@ -59,10 +59,10 @@ vars.members = {
 }
 vars.events = {
     -- [uri] = {
-    --     event_type = number,
     --     uri = string,
-    --     ttl = number,
+    --     status = number,
     --     incarnation = number,
+    --     ttl = number,
     -- }
 }
 
@@ -92,16 +92,6 @@ local function member_pairs()
     return pairs(res)
 end
 
-local function add_member(uri, incarnation)
-    log.info("Adding new member: %s", uri)
-
-    vars.members[uri] = {
-        status = STATUS_ALIVE,
-        incarnation = incarnation or 0,
-    }
-    -- TODO callback
-end
-
 local function get_incarnation(uri)
     return vars.members[uri].incarnation
 end
@@ -121,13 +111,6 @@ local function get_status(uri)
     return vars.members[uri].status
 end
 
-local function set_timestamp(uri, timestamp)
-    vars.members[uri].timestamp = timestamp
-end
-
-local function get_timestamp(uri)
-    return vars.members[uri].timestamp
-end
 
 local function select_next_member()
     if vars.shuffled_member > #vars.shuffled_members then
@@ -168,24 +151,24 @@ end
 
 local function unpack_event(event)
     return {
-        event_type = event[1],
-        uri = event[2],
-        ttl = event[3],
-        incarnation = event[4],
+        uri = event[1],
+        status = event[2],
+        incarnation = event[3],
+        ttl = event[4],
     }
 end
 
 local function pack_event(event)
     return {
-        event.event_type,
         event.uri,
-        event.ttl,
+        event.status,
         event.incarnation,
+        event.ttl,
     }
 end
 
-local function send_message(uri, msg_type, msg_data, extra_event)
-    checks("string", "number", "?", "?")
+local function send_message(uri, msg_type, msg_data)
+    checks("string", "number", "?")
     local conn, err = pool.connect(uri)
     if err then
         return false, err
@@ -193,31 +176,40 @@ local function send_message(uri, msg_type, msg_data, extra_event)
 
     local events_to_send = {}
     local expired = {}
+    local extra_event
 
-    if extra_event then
-        table.insert(events_to_send, pack_event(extra_event))
-    end
+    extra_event = vars.events[uri] or {
+        uri = uri,
+        status = vars.members[uri].status,
+        incarnation = vars.members[uri].incarnation,
+        ttl = 0,
+    }
+    table.insert(events_to_send, pack_event(extra_event))
+
+    extra_event = vars.events[vars.advertise_uri] or {
+        uri = vars.advertise_uri,
+        status = STATUS.alive,
+        incarnation = vars.members[vars.advertise_uri].incarnation,
+        ttl = 0,
+    }
+    table.insert(events_to_send, pack_event(extra_event))
 
     for _, event in pairs(vars.events) do
         if #events_to_send > EVENT_PIGGYBACK_LIMIT then
             break
         end
 
-        if extra_event and extra_event.uri == event.uri then
-            -- it has already been sent 10 SLoCs before
-            -- continue
-        else
-            event.ttl = event.ttl - 1
-            if event.ttl <= 0 then
-                table.insert(expired, event.uri)
-            else
-                table.insert(events_to_send, pack_event(event))
-            end
+        event.ttl = event.ttl - 1
+        if event.ttl <= 0 then
+            table.insert(expired, event.uri)
+        end
+        if event.uri ~= uri then
+            table.insert(events_to_send, pack_event(event))
         end
     end
 
     for _, uri in ipairs(expired) do
-        log.info("expiring event for %s", uri)
+        -- log.info("expiring event for %s", uri)
         vars.events[uri] = nil
     end
 
@@ -235,96 +227,53 @@ end
 local function handle_event(event)
     local uri = event.uri
 
-    if vars.advertise_uri == uri then
-        if event.event_type == EVENT_SUSPECT or event.event_type == EVENT_DEAD then
-            log.info("refuting the rumor that we are dead")
-            local incarnation = math.max(event.incarnation, get_incarnation(vars.advertise_uri)) + 1
-            set_incarnation(vars.advertise_uri, incarnation)
+    if event.uri == vars.advertise_uri then
+        -- this is a rumor about ourselves
+        local myself = vars.members[vars.advertise_uri]
 
-            vars.events[uri] = {
-                event_type = EVENT_ALIVE,
-                uri = vars.advertise_uri,
-                ttl = _table_count(vars.members),
-                incarnation = incarnation,
-            }
+        if event.status ~= STATUS.alive then
+            if not myself or event.incarnation >= myself.incarnation then
+                -- someone thinks that we are dead
+                log.info("Refuting the rumor that we are dead")
+                event.incarnation = event.incarnation + 1
+                event.status = STATUS.alive
+                event.ttl = _table_count(vars.members)
+            end
+        elseif not myself or event.incarnation > myself.incarnation then
+            event.ttl = _table_count(vars.members)
         end
-
-        return
     end
 
-    if vars.events[uri] == nil then
-        vars.events[uri] = event
-    else
-        local old_event = vars.events[uri]
+    -- drop outdated events
+    local member = vars.members[uri]
 
-        if event.event_type == EVENT_ALIVE then
-            if old_event.event_type == EVENT_ALIVE and event.incarnation > old_event.incarnation then
-                vars.events[uri] = event
-            elseif old_event.event_type == EVENT_SUSPECT and event.incarnation > old_event.incarnation then
-                vars.events[uri] = event
-            end
-        elseif event.event_type == EVENT_SUSPECT then
-            if old_event.event_type == EVENT_ALIVE and event.incarnation >= old_event.incarnation then
-                vars.events[uri] = event
-            elseif old_event.event_type == EVENT_SUSPECT and event.incarnation > old_event.incarnation then
-                vars.events[uri] = event
-            end
-        elseif event.event_type == EVENT_DEAD then
-            if old_event.event_type == EVENT_ALIVE then
-                vars.events[uri] = event
-            elseif old_event.event_type == EVENT_SUSPECT then
-                vars.events[uri] = event
-            end
+    if not member or event.incarnation > member.incarnation then
+        vars.events[uri] = event
+    elseif event.incarnation == member.incarnation then
+        if event.status > member.status then
+            vars.events[uri] = event
         end
     end
 
     if vars.events[uri] ~= event then
+        -- event is outdated, drop it
         return
     end
 
-    local status = get_status(uri)
-
-    if event.event_type == EVENT_ALIVE and event.incarnation > get_incarnation(uri) then
-        set_status(uri, STATUS_ALIVE)
-        set_incarnation(uri, event.incarnation)
-        set_timestamp(uri, clock.time64())
-        log.info("rumor: node is alive: '%s'", uri)
-    elseif event.event_type == EVENT_SUSPECT then
-        if (status == STATUS_ALIVE and event.incarnation >= get_incarnation(uri)) or
-            event.incarnation > get_incarnation(uri) then
-            set_status(uri, STATUS_SUSPECT)
-            set_incarnation(uri, event.incarnation)
-            set_timestamp(uri, clock.time64())
-            log.info("rumor: node is suspected: '%s'", uri)
-        end
-    elseif event.event_type == EVENT_DEAD then
-        set_status(uri, STATUS_DEAD)
-        set_incarnation(uri, math.max(event.incarnation, get_incarnation(uri)))
-        set_timestamp(uri, clock.time64())
-        log.info("rumor: node is dead: '%s'", uri)
+    -- update members list
+    if not member then
+        member = {}
+        log.info("Adding: %s (inc. %d) is %s", uri, event.incarnation, STATUS_NAMES[event.status])
+    elseif member.status ~= event.status or member.incarnation ~= event.incarnation then
+        log.info('Rumor: %s (inc. %d) is %s', uri, event.incarnation, STATUS_NAMES[event.status])
     end
-end
-
-local function send_ping(uri, timestamp)
-    local extra_event = nil
-    local member = vars.members[uri]
-    if member.status ~= STATUS_ALIVE then
-        extra_event = {
-            event_type = member.status,
-            uri = uri,
-            ttl = _table_count(vars.members), -- TODO this line is useless
-            incarnation = member.incarnation,
-        }
-    end
-
-    return send_message(uri, MESSAGE_PING, timestamp, extra_event)
+    member.status = event.status
+    member.incarnation = event.incarnation
+    member.timestamp = fiber.time64()
+    vars.members[uri] = member
 end
 
 local function handle_message(sender_uri, msg_type, msg_data, new_events)
-
-    if not vars.members[sender_uri] then
-        add_member(sender_uri)
-    end
 
     for _, event in ipairs(new_events) do
         handle_event(unpack_event(event))
@@ -348,10 +297,19 @@ local function handle_message_loop()
 
         if not ok then
             log.error(res)
-            log.error(debug.traceback())
         end
     end
 end
+
+local function add_member(uri, incarnation)
+    handle_event({
+        uri = uri,
+        status = STATUS.alive,
+        incarnation = incarnation or 1,
+        ttl = _table_count(vars.members),
+    })    
+end
+
 
 function membership_recv_message(sender_uri, typ, data, new_events)
     vars.message_channel:put({sender_uri, typ, data, new_events})
@@ -359,10 +317,12 @@ end
 
 
 local function timeout_ping_requests()
+    local now = fiber.time64()
+    local timeout = PROTOCOL_PERIOD_SECONDS * 1.0e6
     while true do
         for i=#indirect_ping_requests,1,-1 do
             local req = indirect_ping_requests[i]
-            if req.timestamp - clock.time64() > PROTOCOL_PERIOD_SECONDS * 10^9 then
+            if now - req.timestamp > timeout then
                 table.remove(indirect_ping_requests, i)
             end
         end
@@ -374,7 +334,7 @@ end
 
 local function wait_ack(uri, timestamp)
     local now
-    local timeout = ACK_TIMEOUT_SECONDS * 10^9
+    local timeout = ACK_TIMEOUT_SECONDS * 1.0e6
     local deadline = timestamp + timeout
     repeat
         now = fiber.time64()
@@ -385,46 +345,9 @@ local function wait_ack(uri, timestamp)
                 return true
             end
         end
-    until (now >= deadline) or not vars.ack_condition:wait(tonumber(deadline - now) / 10^9)
+    until (now >= deadline) or not vars.ack_condition:wait(tonumber(deadline - now) / 1.0e6)
 
     return false
-end
-
-local function mark_alive(uri)
-    if get_status(uri) == STATUS_ALIVE then
-        -- do nothing
-        return
-    end
-
-    if vars.events[uri] == nil or vars.events[uri].incarnation < get_incarnation(uri) then
-        set_status(uri, STATUS_ALIVE)
-        set_timestamp(uri, clock.time64())
-
-        vars.events[uri] = {
-            event_type = EVENT_ALIVE,
-            uri = uri,
-            ttl = _table_count(vars.members),
-            incarnation = get_incarnation(uri),
-        }
-    end
-end
-
-local function mark_suspect(uri)
-    if get_status(uri) ~= STATUS_ALIVE then
-        return
-    end
-
-    if vars.events[uri] == nil or vars.events[uri].incarnation <= get_incarnation(uri) then
-        set_status(uri, STATUS_SUSPECT)
-        set_timestamp(uri, clock.time64())
-
-        vars.events[uri] = {
-            event_type = EVENT_SUSPECT,
-            uri = uri,
-            ttl = _table_count(vars.members),
-            incarnation = get_incarnation(uri),
-        }
-    end
 end
 
 local function mark_dead(uri)
@@ -439,25 +362,23 @@ local function protocol_step()
     end
 
     local ts = fiber.time64()
-    local ok, _ = send_ping(uri, ts)
+    local ok, _ = send_message(uri, MESSAGE_PING, ts)
 
     if ok and wait_ack(uri, ts) then
-        mark_alive(uri)
+        -- ok
         return
-    end
-
-    if vars.members[uri].status == STATUS_DEAD then
+    elseif vars.members[uri].status == STATUS.dead then
         -- still dead, do nothing
         return
     end
-
 
     local ts = fiber.time64()
     for _ = 1, NUM_FAILURE_DETECTION_SUBGROUPS do
         local through_uri = select_random_live_member(uri)
 
         if through_uri == nil then
-            log.error("No live members for indirect ping")
+            -- log.error("No live members for indirect ping")
+            break
         else
             --log.info("through: " .. through_uri)
             send_message(through_uri, MESSAGE_INDIRECT_PING, uri)
@@ -465,37 +386,42 @@ local function protocol_step()
     end
 
     if wait_ack(uri, ts) then
-        mark_alive(uri)
+        -- ok
         return
-    else
+    elseif vars.members[uri].status == STATUS.alive then
         log.info("Couldn't reach node: %s", uri)
-        mark_suspect(uri)
+        handle_event({
+            uri = uri,
+            status = STATUS.suspect,
+            incarnation = vars.members[uri].incarnation,
+            ttl = _table_count(vars.members),
+        })
         return
     end
 end
 
 local function expire()
-    for k,_ in pairs(vars.members) do
-        if get_status(k) == STATUS_SUSPECT and
-           get_timestamp(k) - clock.time64() > SUSPECT_TIMEOUT_SECONDS * 10^9 then
-                set_status(k, STATUS_DEAD)
-                set_timestamp(k, clock.time64())
-                vars.events[k] = {
-                    event_type = EVENT_DEAD,
-                    uri = k,
-                    ttl = _table_count(vars.members),
-                    incarnation = get_incarnation(k),
-                }
-                log.info("Suspected node is unreachable. Marking as dead: '%s'", k)
+    local now = fiber.time64()
+    local timeout = SUSPECT_TIMEOUT_SECONDS * 1.0e6
+    for uri, member in pairs(vars.members) do
+        local deadline = member.timestamp + timeout
+
+        if member.status == STATUS.suspect and now > deadline then
+            log.info("Suspected node is unreachable.")
+            handle_event({
+                uri = uri,
+                status = STATUS.dead,
+                incarnation = member.incarnation,
+                ttl = _table_count(vars.members),
+            })
         end
     end
 
     for i=#vars.ack_messages,1,-1 do
         local uri = vars.ack_messages[i][1]
         local ts = vars.ack_messages[i][2]
-        local now = clock.time64()
 
-        if now - ts > ACK_EXPIRE_SECONDS * 10^9 then
+        if now - ts > ACK_EXPIRE_SECONDS * 1.0e6 then
             table.remove(vars.ack_messages, i)
         end
     end
@@ -508,8 +434,6 @@ local function protocol_loop()
 
         if not ok then
             log.error(res)
-            log.error(debug.traceback())
-
         end
 
         expire()
@@ -612,9 +536,7 @@ local function init(advertise_uri)
     checks("string")
     vars.advertise_uri = advertise_uri
 
-    if not vars.members[advertise_uri] then
-        add_member(advertise_uri)
-    end
+    add_member(advertise_uri)
 
     fiber.create(anti_entropy_loop)
     fiber.create(protocol_loop)
@@ -626,10 +548,10 @@ local function get_advertise_uri()
     return vars.advertise_uri
 end
 
-
 return {
     init = init,
     pairs = member_pairs,
+    members = vars.members,
     add_member = add_member,
     get_advertise_uri = get_advertise_uri
 }
