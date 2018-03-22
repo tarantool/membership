@@ -273,6 +273,16 @@ local function handle_event(event)
     vars.members[uri] = member
 end
 
+local function gen_event(uri, status, incarnation)
+    checks("string", "?number", "?number")
+    handle_event({
+        uri = uri,
+        status = status or STATUS.alive,
+        incarnation = incarnation or 1,
+        ttl = _table_count(vars.members),
+    })    
+end
+
 local function handle_message(sender_uri, msg_type, msg_data, new_events)
 
     for _, event in ipairs(new_events) do
@@ -300,16 +310,6 @@ local function handle_message_loop()
         end
     end
 end
-
-local function add_member(uri, incarnation)
-    handle_event({
-        uri = uri,
-        status = STATUS.alive,
-        incarnation = incarnation or 1,
-        ttl = _table_count(vars.members),
-    })    
-end
-
 
 function membership_recv_message(sender_uri, typ, data, new_events)
     vars.message_channel:put({sender_uri, typ, data, new_events})
@@ -447,7 +447,7 @@ end
 function membership_recv_anti_entropy(remote_tbl)
     for uri, val in pairs(remote_tbl) do
         if not vars.members[uri] then
-            add_member(uri, val.incarnation)
+            gen_event(uri, STATUS.alive, val.incarnation)
             set_status(uri, val.status)
         elseif get_incarnation(uri) < remote_tbl[uri].incarnation then
             set_incarnation(uri, val.incarnation)
@@ -501,7 +501,7 @@ local function anti_entropy_step()
 
     for uri, val in pairs(remote_tbl) do
         if not vars.members[uri] then
-            add_member(uri, val.incarnation)
+            gen_event(uri, STATUS.alive, val.incarnation)
             set_status(uri, val.status)
         elseif get_incarnation(uri) < val.incarnation then
             set_incarnation(uri, val.incarnation)
@@ -536,7 +536,7 @@ local function init(advertise_uri)
     checks("string")
     vars.advertise_uri = advertise_uri
 
-    add_member(advertise_uri)
+    gen_event(advertise_uri)
 
     fiber.create(anti_entropy_loop)
     fiber.create(protocol_loop)
@@ -552,6 +552,6 @@ return {
     init = init,
     pairs = member_pairs,
     members = vars.members,
-    add_member = add_member,
+    add_member = gen_event,
     get_advertise_uri = get_advertise_uri
 }
