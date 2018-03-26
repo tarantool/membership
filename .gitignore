@@ -6,3 +6,5 @@
 .*.swp
 .#.*
 .rocks
+__pycache__
+.cache/
