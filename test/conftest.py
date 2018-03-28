@@ -15,15 +15,37 @@ from threading import Thread
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
+TARANTOOL_CONNECTION_TIMEOUT = 1.0
 
-TARANTOOL_CONNECTION_TIMEOUT = 5.0
+class Helpers:
+    @staticmethod
+    def wait_for(fn, args=[], kwargs={}, timeout=5):
+        """Repeatedly call fn(*args, **kwargs)
+        until it returns True or timeout occurs"""
+        time_start = time.time()
+        exception = None
+        while True:
+            now = time.time()
+            if now > time_start + timeout:
+                raise Exception("Operation timed out: {}".format(exception))
 
+            try:
+                if fn(*args, **kwargs):
+                    break
+                else:
+                    raise Exception("function returns false")
+            except Exception as e:
+                exception = e
+                time.sleep(0.1)
+
+@pytest.fixture(scope='session')
+def helpers():
+    return Helpers
 
 def consume_lines(pipe):
     with pipe:
         for line in iter(pipe.readline, b''):
             logging.warn("server: " + line.strip().decode('utf-8'))
-
 
 @pytest.fixture(scope='module')
 def module_tmpdir(request):
@@ -32,17 +54,11 @@ def module_tmpdir(request):
     request.addfinalizer(lambda: dir.remove(rec=1))
     return str(dir)
 
-@pytest.fixture(scope='module')
-def confdir(request):
-    dir = os.path.join(request.fspath.dirname, 'config')
-    logging.warn("Create confdir: {}".format(str(dir)))
-
-    return str(dir)
-
 class Server(object):
     def __init__(self, port, tmpdir):
         self.port = port
         self.tmpdir = tmpdir
+        self.conn = None
         pass
 
     def start(self):
@@ -54,86 +70,35 @@ class Server(object):
         self.process = Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env, bufsize=1)
         Thread(target=consume_lines, args=[self.process.stdout]).start()
 
-    def wait(self):
-        logging.warn("Waiting for 'localhost:{}'".format(self.port))
-
-        time_start = time.time()
-        while True:
-            now = time.time()
-
-            if now - time_start > TARANTOOL_CONNECTION_TIMEOUT:
-                raise Exception("Timed out while connecting to Tarantool instance")
-
-            try:
-                conn = tarantool.connect('127.0.0.1', self.port)
-            except:
-                time.sleep(0.1)
-                continue
-
-            try:
-                if conn.eval('return is_initialized')[0]:
-                    break
-            except:
-                pass
-
-            conn.close()
-            time.sleep(0.1)
-
-        logging.warn("Ready.")
+    def connect(self):
+        if self.conn == None:
+            self.conn = tarantool.connect('127.0.0.1', self.port)
+        return self.conn.eval('return is_initialized')[0]
 
     def kill(self):
+        if self.conn != None:
+            # logging.warn('Closing connection to {}'.format(self.port))
+            self.conn.close()
+            self.conn = None
         self.process.kill()
 
+    def add_member(self, uri):
+        cmd = "return membership.add_member('{}')".format(uri)
+        # returns: true/false
+        return self.conn.eval(cmd)[0]
 
-    def post(self, path, data=None, json=None):
-        if data is not None:
-            data = data.encode('utf-8')
-
-        url = self.baseurl + '/' + path.lstrip('/')
-        r = requests.post(url, data=data, json=json)
-        r.raise_for_status()
-
-        return r.text
-
-    def soap(self, data=None):
-        if data is not None:
-            data = data.encode('utf-8')
-
-        url = self.baseurl + '/soap'
-        headers = {'Content-Type': 'application/xml'}
-        r = requests.post(url, data=data, headers=headers)
-        r.raise_for_status()
-
-        return r.text
-
-
-    def graphql(self, query):
-        url = self.baseurl + '/graphql'
-
-        request = {"query": query}
-
-        r = requests.post(url, json=request)
-
-        r.raise_for_status()
-
-        return r.json()
-
+    def members(self):
+        cmd = "return membership.members()"
+        return self.conn.eval(cmd)[0]
 
 @pytest.fixture(scope="module")
-def server(request, confdir, module_tmpdir):
-    server = Server(3301)
-    server.start()
-    request.addfinalizer(server.kill)
-    server.wait()
-    return server
-
-@pytest.fixture(scope="module")
-def servers(request, module_tmpdir):
+def servers(request, module_tmpdir, helpers):
     servers = {}
     for port in getattr(request.module, "servers_list"):
         srv = Server(port, module_tmpdir)
         srv.start()
         request.addfinalizer(srv.kill)
-        srv.wait()
+        helpers.wait_for(srv.connect, timeout=TARANTOOL_CONNECTION_TIMEOUT)
+        # srv.wait()
         servers[port] = srv
     return servers

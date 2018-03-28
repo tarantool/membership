@@ -253,7 +253,6 @@ end
 
 local function protocol_loop()
     while true do
-        log.info('step')
         local t1 = fiber.time()
         local ok, res = xpcall(protocol_step, debug.traceback)
 
@@ -303,7 +302,9 @@ local function anti_entropy_loop()
         if not ok then
             log.error(res)
             fiber.sleep(opts.PROTOCOL_PERIOD_SECONDS)
-        elseif res then
+        elseif not res then
+            fiber.sleep(opts.PROTOCOL_PERIOD_SECONDS)
+        else
             fiber.sleep(opts.ANTI_ENTROPY_PERIOD_SECONDS)
         end
     end
@@ -324,13 +325,13 @@ local function init(advertise_host, port)
     end
     _sock:nonblock(true)
 
-    local advertise_uri = uri_tools.format({scheme = 'udp', host = advertise_host, service = tostring(port)})
+    local advertise_uri = uri_tools.format({host = advertise_host, service = tostring(port)})
     opts.set_advertise_uri(advertise_uri)
     events.generate(advertise_uri, opts.ALIVE)
 
     fiber.create(protocol_loop)
     fiber.create(handle_message_loop)
-    -- fiber.create(anti_entropy_loop)
+    fiber.create(anti_entropy_loop)
 end
 
 local function get_advertise_uri()
@@ -344,8 +345,9 @@ local function add_member(uri)
         return nil, 'parse error'
     end
 
-    uri = uri_tools.format({scheme = 'udp', host = parts.host, service = parts.service})
+    uri = uri_tools.format({host = parts.host, service = parts.service})
     events.generate(uri, opts.ALIVE)
+    return true
 end
 
 return {

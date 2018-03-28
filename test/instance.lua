@@ -1,4 +1,4 @@
-#!/usb/bin/env tarantool
+#!/usr/bin/env tarantool
 
 require('strict').on()
 local log = require('log')
@@ -8,7 +8,7 @@ if rawget(_G, "is_initialized") == nil then
 end
 
 local listen = os.getenv('TARANTOOL_LISTEN')
-local workdir = os.getenv('TARANTOOL_WORKDIR')
+local workdir = os.getenv('TARANTOOL_WORKDIR') or './tmp'
 os.execute('mkdir -p ' .. workdir)
 box.cfg({
     listen = listen,
@@ -22,5 +22,5 @@ box.once('tarantool-entrypoint', function ()
 end)
 
 membership = require('membership')
-membership.init('localhost:' .. tostring(listen))
+membership.init('localhost', tonumber(listen))
 _G.is_initialized = true

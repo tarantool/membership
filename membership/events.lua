@@ -10,6 +10,8 @@ local _all_events = {
     --     incarnation = number,
     --     ttl = number,
     -- }
+
+    -- uri is a string in format '<host>:<port>'
 }
 local _expired = {
     -- [uri] = true

@@ -10,6 +10,8 @@ local _all_members = {
     --     incarnation = number,
     --     timestamp = time64,
     -- }
+
+    -- uri is a string in format '<host>:<port>'
 }
 
 local _shuffled_uri_list = {}
