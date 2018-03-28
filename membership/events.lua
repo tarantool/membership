@@ -17,6 +17,11 @@ local _expired = {
     -- [uri] = true
 }
 
+function events.clear()
+    _all_events = {}
+    _expired = {}
+end
+
 function events.get(uri)
     checks('string')
     return _all_events[uri]
@@ -83,7 +88,7 @@ function events.generate(uri, status, incarnation)
             or (members.get(uri) or {}).incarnation
             or 1,
         ttl = members.count(),
-    })    
+    })
 end
 
 function events.handle(event)

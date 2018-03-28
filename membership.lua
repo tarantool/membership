@@ -157,13 +157,17 @@ local function handle_message(msg)
         else
             _sync_trigger:broadcast()
         end
+    elseif msg_type == 'QUIT' then
+        -- just handle the event
+        -- do nothing more
     else
         log.error('Unknown message %s', msg_type)
     end
 end
 
 local function handle_message_loop()
-    while true do
+    local sock = _sock
+    while sock == _sock do
         if _sock:readable(opts.PROTOCOL_PERIOD_SECONDS) then
             local ok, err = xpcall(handle_message, debug.traceback, _sock:recvfrom())
             if not ok then
@@ -249,7 +253,8 @@ local function protocol_step()
 end
 
 local function protocol_loop()
-    while true do
+    local sock = _sock
+    while sock == _sock do
         local t1 = fiber.time()
         local ok, res = xpcall(protocol_step, debug.traceback)
 
@@ -293,7 +298,8 @@ local function anti_entropy_step()
 end
 
 local function anti_entropy_loop()
-    while true do
+    local sock = _sock
+    while sock == _sock do
         local ok, res = xpcall(anti_entropy_step, debug.traceback)
 
         if not ok then
@@ -329,6 +335,31 @@ local function init(advertise_host, port)
     fiber.create(protocol_loop)
     fiber.create(handle_message_loop)
     fiber.create(anti_entropy_loop)
+    return true
+end
+
+local function quit()
+    -- First, we need to stop all fibers
+    local sock = _sock
+    _sock = nil
+
+    -- Then, broadcast the quit status
+    local event = events.pack({
+        uri = opts.advertise_uri,
+        status = opts.QUIT,
+        incarnation = members.myself().incarnation,
+        ttl = members.count(),
+    })
+    local msg = msgpack.encode({opts.advertise_uri, 'QUIT', msgpack.NULL, {event}})
+    for _, uri in ipairs(members.random_alive_uri_list(members.count())) do
+        local host, port = resolve(uri)
+        sock:sendto(host, port, msg)
+    end
+    
+    sock:close()
+    members.clear()
+    events.clear()
+    return true
 end
 
 local function get_advertise_uri()
@@ -349,6 +380,7 @@ end
 
 return {
     init = init,
+    quit = quit,
     pairs = members.pairs,
     members = members.all,
     add_member = add_member,

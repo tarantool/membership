@@ -1,9 +1,10 @@
 local options = {}
 
-options.STATUS_NAMES = {'alive', 'suspect', 'dead'}
+options.STATUS_NAMES = {'alive', 'suspect', 'dead', 'quit'}
 options.ALIVE = 1
 options.SUSPECT = 2
 options.DEAD = 3
+options.QUIT = 4
 
 options.PROTOCOL_PERIOD_SECONDS = 1.0 -- denoted as T' in SWIM paper
 options.ACK_TIMEOUT_SECONDS = 0.200 -- ack timeout 

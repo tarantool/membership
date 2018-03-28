@@ -17,6 +17,12 @@ local _all_members = {
 local _shuffled_uri_list = {}
 local _shuffled_idx = 1
 
+function members.clear()
+    _all_members = {}
+    _shuffled_uri_list = {}
+    _shuffled_idx = 1
+end
+
 function members.all()
     local ret = {}
     for uri, member in pairs(_all_members) do
