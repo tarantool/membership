@@ -19,7 +19,7 @@ TARANTOOL_CONNECTION_TIMEOUT = 1.0
 
 class Helpers:
     @staticmethod
-    def wait_for(fn, args=[], kwargs={}, timeout=5):
+    def wait_for(fn, args=[], kwargs={}, timeout=10):
         """Repeatedly call fn(*args, **kwargs)
         until it returns True or timeout occurs"""
         time_start = time.time()
@@ -42,10 +42,10 @@ class Helpers:
 def helpers():
     return Helpers
 
-def consume_lines(pipe):
+def consume_lines(port, pipe):
     with pipe:
         for line in iter(pipe.readline, b''):
-            logging.warn("server: " + line.strip().decode('utf-8'))
+            logging.warn("server {}: {}".format(port, line.strip().decode('utf-8')))
 
 @pytest.fixture(scope='module')
 def module_tmpdir(request):
@@ -68,7 +68,7 @@ class Server(object):
 
         cmd = ["tarantool", os.path.join(script_dir, 'instance.lua')]
         self.process = Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env, bufsize=1)
-        Thread(target=consume_lines, args=[self.process.stdout]).start()
+        Thread(target=consume_lines, args=[self.port, self.process.stdout]).start()
 
     def connect(self):
         if self.conn == None:

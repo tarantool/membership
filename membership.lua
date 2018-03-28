@@ -85,10 +85,7 @@ local function send_message(uri, msg_type, msg_data)
     events.gc()
 
     local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, events_to_send})
-    -- log.warn('Sending: %s', tostring(msg))
     local ret = _sock:sendto(host, port, msg)
-    log.warn('sent %s bytes to %s:%d', msg_type, host, port)
-
     return ret and ret > 0
 end
 

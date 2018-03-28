@@ -46,7 +46,7 @@ function events.pack(event)
 end
 
 function events.gc()
-    for uri, _ in ipairs(_expired) do
+    for uri, _ in pairs(_expired) do
         _all_events[uri] = nil
     end
     _expired = {}
