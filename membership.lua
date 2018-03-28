@@ -1,32 +1,58 @@
 #!/usr/bin/env tarantool
 
 local log = require('log')
+local uri_tools = require('uri')
 local json = require('json')
-local pool = require('pool')
 local fiber = require('fiber')
 local checks = require('checks')
+local socket = require('socket')
+local msgpack = require('msgpack')
 
 local opts = require('membership.options')
 local events = require('membership.events')
 local members = require('membership.members')
 
-local MESSAGE_PING = 1
-local MESSAGE_ACK = 2
-
-local _msg_channel = fiber.channel(1000)
+local _sock = nil
+local _sync_trigger = fiber.cond()
 local _ack_trigger = fiber.cond()
 local _ack_cache = {}
--- local _ping_cache = {}
+
+local _resolve_cache = {}
+local function resolve(uri)
+    checks("string")
+    
+    local _cached = _resolve_cache[uri]
+    if _cached then
+        return unpack(_cached)
+    end
+
+    local parts = uri_tools.parse(uri)
+    if not parts then
+        return nil, nil, 'parse error'
+    end
+
+    local hosts = socket.getaddrinfo(parts.host, parts.service, {family='AF_INET', type='SOCK_DGRAM'})
+    if hosts == nil or #hosts == 0 then
+        return nil, nil, 'getaddrinfo failed'
+    end
+
+    local _cached = {hosts[1].host, hosts[1].port}
+    _resolve_cache[uri] = _cached
+    return unpack(_cached)
+end
+
+--
+-- SEND FUNCTIONS
+--
 
 local function send_message(uri, msg_type, msg_data)
-    checks("string", "number", "?")
-    local conn, err = pool.connect(uri)
-    if err then
-        return false, err
+    checks("string", "string", "table")
+    local host, port = resolve(uri)
+    if not host then
+        return false
     end
 
     local events_to_send = {}
-    local expired = {}
 
     local extra_event = events.get(uri) or {
         uri = uri,
@@ -58,75 +84,110 @@ local function send_message(uri, msg_type, msg_data)
 
     events.gc()
 
-    local ok, err = pcall(
-        conn.call,
-        conn,
-        'membership_recv_message',
-        {opts.advertise_uri, msg_type, msg_data, events_to_send},
-        {timeout = opts.ACK_TIMEOUT_SECONDS}
-    )
+    local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, events_to_send})
+    -- log.warn('Sending: %s', tostring(msg))
+    local ret = _sock:sendto(host, port, msg)
+    log.warn('sent %s bytes to %s:%d', msg_type, host, port)
 
-    return ok, err
+    return ret and ret > 0
 end
 
+local function send_anti_entropy(uri, msg_type, remote_tbl)
+    -- send to `uri` all local members that are not in `remote_tbl`
+    checks("string", "string", "table")
+    local host, port = resolve(uri)
+    if not host then
+        return false
+    end
 
-local function handle_message(sender_uri, msg_type, msg_data, new_events)
+    local msg_data = {}
+    for uri, member in members.pairs() do
+        if events.should_overwrite(member, remote_tbl[uri]) then
+            msg_data[uri] = {
+                status = member.status,
+                incarnation = member.incarnation,
+            }
+        end
+    end
 
-    for _, event in ipairs(new_events) do
+    local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})
+    local ret = _sock:sendto(host, port, msg)
+    return ret and ret > 0
+end
+
+--
+-- RECEIVE FUNCTIONS
+--
+
+local function handle_message(msg)
+    local msg, _ = msgpack.decode(msg)
+    local sender_uri, msg_type, msg_data, new_events = unpack(msg)
+    -- log.warn('FROM: %s', tostring(sender_uri))
+
+    -- log.warn('Got: %s', json.encode(msgpack.decode(msg) or 'nothing'))
+    for _, event in ipairs(new_events or {}) do
         events.handle(events.unpack(event))
     end
 
-    if msg_type == MESSAGE_PING then
-        send_message(sender_uri, MESSAGE_ACK, msg_data)
-    -- elseif msg_type == MESSAGE_INDIRECT_PING then
-
-    elseif msg_type == MESSAGE_ACK then
-        table.insert(_ack_cache, {uri = sender_uri, timestamp = msg_data})
-        _ack_trigger:broadcast()
+    if msg_type == 'PING' then
+        if msg_data.dst == opts.advertise_uri then
+            send_message(sender_uri, 'ACK', msg_data)
+        elseif msg_data.dst ~= nil then
+            -- forward
+            send_message(msg_data.dst, 'PING', msg_data)
+        else
+            log.error('Message PING without destination uri')
+        end
+    elseif msg_type == 'ACK' then
+        if msg_data.src == opts.advertise_uri then
+            table.insert(_ack_cache, msg_data)
+            _ack_trigger:broadcast()
+        elseif msg_data.src ~= nil then
+            -- forward
+            send_message(msg_data.src, 'ACK', msg_data)
+        else
+            log.error('Message ACK without source uri')
+        end
+    elseif msg_type == 'SYNC_REQ' or msg_type == 'SYNC_ACK' then
+        local remote_tbl = msg_data
+        for uri, member in pairs(remote_tbl) do
+            if events.should_overwrite(member, members.get(uri)) then
+                events.generate(uri, member.status, member.incarnation)
+            end
+        end
+        if msg_type == 'SYNC_REQ' then
+            send_anti_entropy(sender_uri, 'SYNC_ACK', msg_data)
+        else
+            _sync_trigger:broadcast()
+        end
+    else
+        log.error('Unknown message %s', msg_type)
     end
 end
 
 local function handle_message_loop()
     while true do
-        local message = _msg_channel:get()
-        -- handle_message(unpack(message))
-        local ok, err = xpcall(handle_message, debug.traceback, unpack(message))
-
-        if not ok then
-            log.error(err)
+        if _sock:readable(opts.PROTOCOL_PERIOD_SECONDS) then
+            local ok, err = xpcall(handle_message, debug.traceback, _sock:recvfrom())
+            if not ok then
+                log.error(err)
+            end
         end
     end
 end
 
-function membership_recv_message(sender_uri, typ, data, new_events)
-    _msg_channel:put({sender_uri, typ, data, new_events})
-end
+--
+-- PROTOCOL LOOP
+--
 
-
--- local function timeout_ping_requests()
---     local now = fiber.time64()
---     local timeout = opts.PROTOCOL_PERIOD_SECONDS * 1.0e6
---     while true do
---         for i = #_ping_cache, 1, -1 do
---             local ping = _ping_cache[i]
---             if now > ping.timestamp + timeout then
---                 table.remove(_ping_cache, i)
---             end
---         end
-
---         fiber.sleep(1)
---     end
--- end
-
-local function wait_ack(uri, timestamp)
+local function wait_ack(uri, ts, timeout)
     local now
-    local timeout = opts.ACK_TIMEOUT_SECONDS * 1.0e6
-    local deadline = timestamp + timeout
+    local deadline = ts + timeout
     repeat
         now = fiber.time64()
 
         for _, ack in ipairs(_ack_cache) do
-            if ack.uri == uri and ack.timestamp >= timestamp then
+            if ack.dst == uri and ack.ts == ts then
                 return true
             end
         end
@@ -136,33 +197,52 @@ local function wait_ack(uri, timestamp)
 end
 
 local function protocol_step()
-    local uri = members.next_shuffled_uri()
+    local loop_now = fiber.time64()
 
+    -- expire suspected members
+    local expiry = loop_now - opts.SUSPECT_TIMEOUT_SECONDS * 1.0e6
+    for uri, member in members.pairs() do
+        if member.status == opts.SUSPECT and member.timestamp < expiry then
+            log.info('Suspected node timeout.')
+            events.generate(uri, opts.DEAD)
+        end
+    end
+
+    -- cleanup ack cache
+    _ack_cache = {}
+
+    -- prepare to send ping
+    local uri = members.next_shuffled_uri()
     if uri == nil then
         return
     end
 
-    local ts = fiber.time64()
-    local ok, _ = send_message(uri, MESSAGE_PING, ts)
+    local msg_data = {
+        ts = loop_now,
+        src = opts.advertise_uri,
+        dst = uri,
+    }
 
-    if ok and wait_ack(uri, ts) then
-        -- ok
+    -- try direct ping
+    local ok = send_message(uri, 'PING', msg_data)
+    if ok and wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6) then
+        local member = members.get(uri)
+        members.set(uri, member.status, member.incarnation)
         return
     elseif members.get(uri).status == opts.DEAD then
         -- still dead, do nothing
         return
     end
 
-    local ts = fiber.time64()
-    local through_uri_list = members.random_alive_uri_list(opts.NUM_FAILURE_DETECTION_SUBGROUPS)
-
+    -- try indirect ping
+    local through_uri_list = members.random_alive_uri_list(opts.NUM_FAILURE_DETECTION_SUBGROUPS, uri)
     for _, through_uri in ipairs(through_uri_list) do
-        -- todo indirect ping
-        -- send_message(through_uri, MESSAGE_INDIRECT_PING, uri)
+        send_message(through_uri, 'PING', msg_data)
     end
 
-    if wait_ack(uri, ts) then
-        -- ok
+    if wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6) then
+        local member = members.get(uri)
+        members.set(uri, member.status, member.incarnation)
         return
     elseif members.get(uri).status == opts.ALIVE then
         log.info("Couldn't reach node: %s", uri)
@@ -171,29 +251,9 @@ local function protocol_step()
     end
 end
 
-local function expire()
-    local now = fiber.time64()
-    local expiry = now - opts.SUSPECT_TIMEOUT_SECONDS * 1.0e6
-
-    for uri, member in members.pairs() do
-        if member.status == opts.SUSPECT and member.timestamp < expiry then
-            log.info('Suspected node timeout.')
-            events.generate(uri, opts.DEAD)
-        end
-    end
-
-    local expiry = now - opts.ACK_EXPIRE_SECONDS * 1.0e6
-    for i = #_ack_cache, 1, -1 do
-        local ack = _ack_cache[i]
-
-        if ack.timestamp < expiry then
-            table.remove(_ack_cache, i)
-        end
-    end
-end
-
 local function protocol_loop()
     while true do
+        log.info('step')
         local t1 = fiber.time()
         local ok, res = xpcall(protocol_step, debug.traceback)
 
@@ -201,31 +261,29 @@ local function protocol_loop()
             log.error(res)
         end
 
-        expire()
         local t2 = fiber.time()
-
-        -- sleep till next period
         fiber.sleep(t1 + opts.PROTOCOL_PERIOD_SECONDS - t2)
     end
 end
 
-function membership_recv_anti_entropy(remote_tbl)
-    for uri, member in pairs(remote_tbl) do
-        if events.should_overwrite(member, members.get(uri)) then
-            events.generate(uri, member.status, member.incarnation)
-        end
-    end
+--
+-- ANTI ENTROPY SYNC
+--
 
-    local ret = {}
-    for uri, member in members.pairs() do
-        if events.should_overwrite(member, remote_tbl[uri]) then
-            ret[uri] = {
-                status = member.status,
-                incarnation = member.incarnation,
-            }
+local function wait_sync(uri, timeout)
+    local now
+    local deadline = ts + timeout
+    repeat
+        now = fiber.time64()
+
+        for _, ack in ipairs(_ack_cache) do
+            if ack.dst == uri and ack.ts == ts then
+                return true
+            end
         end
-    end
-    return ret
+    until (now >= deadline) or not _ack_trigger:wait(tonumber(deadline - now) / 1.0e6)
+
+    return false
 end
 
 local function anti_entropy_step()
@@ -234,77 +292,45 @@ local function anti_entropy_step()
         return false
     end
 
-    --log.info("anti entropy sync with: " .. tostring(uri))
-
-    local conn, err = pool.connect(uri)
-
-    if err ~= nil then
-        log.error("Failed to do anti-entropy sync: %s", err)
-        return false, err
-    end
-
-    local local_tbl = {}
-    for uri, member in members.pairs() do
-        -- do not send excess information, only uri, status, incarnation
-        local_tbl[uri] = {
-            status = member.status,
-            incarnation = member.incarnation,
-        }
-    end
-
-    local ok, remote_tbl = pcall(
-        conn.call,
-        conn,
-        'membership_recv_anti_entropy',
-        {local_tbl},
-        {timeout = opts.PROTOCOL_PERIOD_SECONDS}
-    )
-
-    if not ok then
-        local err = remote_tbl
-        log.error("Failed to do anti-entropy sync: %s", err)
-        return false, err
-    end
-
-    for uri, member in pairs(remote_tbl) do
-        if events.should_overwrite(member, members.get(uri)) then
-            events.generate(uri, member.status, member.incarnation)
-        end
-    end
-    
-    return true
+    send_anti_entropy(uri, 'SYNC_REQ', {})
+    return _sync_trigger:wait(opts.PROTOCOL_PERIOD_SECONDS)
 end
 
 local function anti_entropy_loop()
-    local initial_sync = true
-
     while true do
-        local sync_performed, err = anti_entropy_step()
+        local ok, res = xpcall(anti_entropy_step, debug.traceback)
 
-        if err ~= nil then
-            log.info("Anti entropy sync failed: %s", err)
-        elseif sync_performed and initial_sync then
-            initial_sync = false
-        end
-
-        if initial_sync then
+        if not ok then
+            log.error(res)
             fiber.sleep(opts.PROTOCOL_PERIOD_SECONDS)
-        else
+        elseif res then
             fiber.sleep(opts.ANTI_ENTROPY_PERIOD_SECONDS)
         end
     end
 end
 
-local function init(advertise_uri)
-    checks("string")
-    opts.set_advertise_uri(advertise_uri)
+--
+-- BASIC FUNCTIONS
+--
 
+local function init(advertise_host, port)
+    checks("string", "number")
+
+    _sock = socket('AF_INET', 'SOCK_DGRAM', 'udp')
+    local ok, status, errno, errstr = _sock:bind('0.0.0.0', port)
+    if not ok then
+        log.error('%s: %s', status, errstr)
+        error('Socket bind error')
+    end
+    _sock:nonblock(true)
+
+    local advertise_uri = uri_tools.format({scheme = 'udp', host = advertise_host, service = tostring(port)})
+    opts.set_advertise_uri(advertise_uri)
     events.generate(advertise_uri, opts.ALIVE)
 
-    fiber.create(anti_entropy_loop)
     fiber.create(protocol_loop)
     fiber.create(handle_message_loop)
-    -- fiber.create(timeout_ping_requests)
+    -- fiber.create(anti_entropy_loop)
 end
 
 local function get_advertise_uri()
@@ -313,6 +339,12 @@ end
 
 local function add_member(uri)
     checks("string")
+    local parts = uri_tools.parse(uri)
+    if not parts then
+        return nil, 'parse error'
+    end
+
+    uri = uri_tools.format({scheme = 'udp', host = parts.host, service = parts.service})
     events.generate(uri, opts.ALIVE)
 end
 

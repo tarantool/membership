@@ -42,12 +42,18 @@ function members.get(uri)
     return _all_members[uri]
 end
 
-function members.random_alive_uri_list(n)
+function members.random_alive_uri_list(n, excluding)
     checks()
     local ret = {}
 
     for uri, member in pairs(_all_members) do
-        if member.status == opts.ALIVE then
+        if member.status ~= opts.ALIVE then
+            -- skip
+        elseif uri == opts.advertise_uri then
+            -- skip
+        elseif uri == excluding then
+            --skip
+        else
             table.insert(ret, uri)
         end
     end
