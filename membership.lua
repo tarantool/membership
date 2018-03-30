@@ -383,12 +383,15 @@ end
 local function set_payload(payload)
     checks("table")
     local myself = members.myself()
+    -- dirty hack to trigger events.whould_overwrite
+    myself.incarnation = myself.incarnation - 1
+    myself.payload = payload
     events.generate(
         opts.advertise_uri,
         opts.ALIVE,
-        myself.incarnation+1,
-        payload
+        myself.incarnation + 1
     )
+    return true
 end
 
 return {

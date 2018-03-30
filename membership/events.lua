@@ -1,4 +1,6 @@
 local log = require('log')
+local msgpack = require('msgpack')
+
 local opts = require('membership.options')
 local members = require('membership.members')
 
@@ -105,6 +107,7 @@ function events.handle(event)
                 log.info('Refuting the rumor that we are dead')
                 event.incarnation = event.incarnation + 1
                 event.status = opts.ALIVE
+                event.payload = myself.payload
                 event.ttl = members.count()
             end
         elseif not myself then
@@ -116,6 +119,9 @@ function events.handle(event)
             -- when the member who PINGs us does not know we were dead
             -- so we increment incarnation and start spreading
             -- the rumor with our current payload
+
+            --also here goes set_payload()
+            
             event.ttl = members.count()
             event.incarnation = event.incarnation + 1
             event.payload = myself.payload
