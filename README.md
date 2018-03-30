@@ -49,6 +49,8 @@ Particular member is represented by the table with fields:
 `timestamp` corresponds to the last update of status or incarnation.
 `timestamp` is always local and does not depent on other members' clock setting.
 
+Editing this table has no effect.
+
 Example output:
 
 ```yaml
@@ -74,6 +76,14 @@ This is a shorthand for
 ```lua
 pairs(membership.members())
 ```
+
+### myself
+
+```lua
+membership.myself()
+```
+
+Returns member table corresponding to `advertise_uri`.
 
 ### add_member
 

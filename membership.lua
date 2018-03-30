@@ -364,8 +364,16 @@ local function quit()
     return true
 end
 
-local function get_advertise_uri()
-    return opts.advertise_uri
+local function get_myself()
+    local myself = members.myself()
+    return {
+        uri = opts.advertise_uri,
+        status = myself.status,
+        status_name = opts.STATUS_NAMES[myself.status] or tostring(myself.status),
+        payload = myself.payload,
+        incarnation = myself.incarnation,
+        timestamp = myself.timestamp,
+    }
 end
 
 local function add_member(uri)
@@ -401,5 +409,5 @@ return {
     members = members.all,
     add_member = add_member,
     set_payload = set_payload,
-    get_advertise_uri = get_advertise_uri
+    myself = get_myself,
 }
