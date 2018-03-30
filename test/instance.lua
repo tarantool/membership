@@ -26,7 +26,8 @@ membership = require('membership')
 opts = require('membership.options')
 opts.PROTOCOL_PERIOD_SECONDS = 0.4
 opts.ACK_TIMEOUT_SECONDS = 0.2
-opts.ANTI_ENTROPY_PERIOD_SECONDS = 1
+opts.ANTI_ENTROPY_PERIOD_SECONDS = 1.0
+opts.SUSPECT_TIMEOUT_SECONDS = 1.0
 
 membership.init('localhost', tonumber(listen))
 _G.is_initialized = true

@@ -17,27 +17,26 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 logging.basicConfig(format='%(name)s > %(message)s')
 
 TARANTOOL_CONNECTION_TIMEOUT = 1.0
+MEMBERSHIP_UPDATE_TIMEOUT = 3.0
 
 class Helpers:
     @staticmethod
-    def wait_for(fn, args=[], kwargs={}, timeout=10):
+    def wait_for(fn, args=[], kwargs={}, timeout=MEMBERSHIP_UPDATE_TIMEOUT):
         """Repeatedly call fn(*args, **kwargs)
-        until it returns True or timeout occurs"""
+        until it returns something or timeout occurs"""
         time_start = time.time()
-        exception = None
         while True:
             now = time.time()
             if now > time_start + timeout:
-                raise Exception("Operation timed out: {}".format(exception))
+                break
 
             try:
-                if fn(*args, **kwargs):
-                    break
-                else:
-                    raise Exception("function returns false")
-            except Exception as e:
-                exception = e
+                return fn(*args, **kwargs)
+            except:
                 time.sleep(0.1)
+
+        # after timeout call fn once more to propagate exception
+        return fn(*args, **kwargs)
 
 @pytest.fixture(scope='session')
 def helpers():

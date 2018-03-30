@@ -9,8 +9,9 @@ servers_list = [33001, 33002, 33003]
 
 def check_payload(srv, uri, payload):
     member = srv.members()[uri]
-    return member['status_name'] == 'alive' and \
-        member['payload'] == payload
+    assert member['status_name'] == 'alive'
+    assert member['payload'] == payload
+    return True
 
 def test_payload(servers, helpers):
     """Setup two separate clusters"""
