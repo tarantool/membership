@@ -8,7 +8,6 @@ import tempfile
 import py
 import tarantool
 import time
-import requests
 
 from subprocess import Popen, PIPE, STDOUT
 from threading import Thread

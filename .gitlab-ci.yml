@@ -1,0 +1,12 @@
+test:
+  stage: test
+  tags:
+    - docker
+  image: tarantool/tarantool:1
+
+  before_script:
+    - apk add --no-cache make cmake gcc g++ git python3
+    - pip3 install -r test/requirements.txt
+  script:
+    - tarantoolctl rocks make
+    - pytest -v

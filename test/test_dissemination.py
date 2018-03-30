@@ -5,15 +5,15 @@ import pytest
 import logging
 import time
 
-servers_list = range(33001, 33022) # 20 instances
+servers_list = range(33001, 33012) # 10 instances
 
 def check_everybody(servers, uri, status):
-    for port, srv in servers.iteritems():
+    for port, srv in servers.items():
         member = srv.members()[uri]
         assert member['status_name'] == status
 
-def test_payload(servers, helpers):
-    for port, srv in servers.iteritems():
+def test_dissemination(servers, helpers):
+    for port, srv in servers.items():
         if port+1 in servers_list:
             srv.add_member('localhost:{}'.format(port+1))
 
