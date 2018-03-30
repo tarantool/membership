@@ -7,9 +7,7 @@ import logging
 servers_list = [33001, 33002]
 def check_status(srv, uri, status):
     member = srv.members()[uri]
-    # logging.warn(member)
-    return member['status_name'] == status
-
+    assert member['status_name'] == status
 
 def test_join(servers, helpers):
     assert servers[33001].add_member('localhost:33002')

@@ -74,7 +74,7 @@ class Server(object):
     def connect(self):
         if self.conn == None:
             self.conn = tarantool.connect('127.0.0.1', self.port)
-        return self.conn.eval('return is_initialized')[0]
+        assert self.conn.eval('return is_initialized')[0]
 
     def kill(self):
         if self.conn != None:
