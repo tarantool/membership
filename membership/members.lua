@@ -9,6 +9,7 @@ local _all_members = {
     --     status = number,
     --     incarnation = number,
     --     timestamp = time64,
+    --     payload = ?table,
     -- }
 
     -- uri is a string in format '<host>:<port>'
@@ -30,6 +31,7 @@ function members.all()
             uri = uri,
             status = member.status,
             status_name = opts.STATUS_NAMES[member.status] or tostring(member.status),
+            payload = member.payload,
             incarnation = member.incarnation,
             timestamp = member.timestamp,
         }
@@ -94,18 +96,18 @@ function members.next_shuffled_uri()
     return _shuffled_uri_list[_shuffled_idx-1]
 end
 
-function members.set(uri, status, incarnation)
-    do
-        checks("string", "number", "number")
-        local member = _all_members[uri]
-        if member and incarnation < member.incarnation then
-            error('Can not downgrade incarnation')
-        end
+function members.set(uri, status, incarnation, payload)
+    checks('string', 'number', 'number', '?table')
+
+    local member = _all_members[uri]
+    if member and incarnation < member.incarnation then
+        error('Can not downgrade incarnation')
     end
 
     _all_members[uri] = {
         status = status,
         incarnation = incarnation,
+        payload = payload or (member or {}).payload,
         timestamp = fiber.time64(),
     }
 end

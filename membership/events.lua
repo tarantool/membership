@@ -46,6 +46,7 @@ function events.pack(event)
         event.uri,
         event.status,
         event.incarnation,
+        event.payload or msgpack.NULL,
         event.ttl,
     }
 end
@@ -63,7 +64,8 @@ function events.unpack(event)
         uri = event[1],
         status = event[2],
         incarnation = event[3],
-        ttl = event[4],
+        payload = (event[4] ~= msgpack.NULL) and event[4] or nil,
+        ttl = event[5],
     }
 end
 
@@ -79,14 +81,15 @@ function events.should_overwrite(first, second)
     return false
 end
 
-function events.generate(uri, status, incarnation)
-    checks('string', 'number', '?number')
+function events.generate(uri, status, incarnation, payload)
+    checks('string', 'number', '?number', '?table')
     events.handle({
         uri = uri,
         status = status or opts.ALIVE,
         incarnation = incarnation
             or (members.get(uri) or {}).incarnation
             or 1,
+        payload = payload,
         ttl = members.count(),
     })
 end
@@ -104,8 +107,18 @@ function events.handle(event)
                 event.status = opts.ALIVE
                 event.ttl = members.count()
             end
-        elseif not myself or event.incarnation > myself.incarnation then
+        elseif not myself then
+            -- this branch is called from init()
             event.ttl = members.count()
+
+        elseif event.incarnation > myself.incarnation then
+            -- this branch could be called after quick restart
+            -- when the member who PINGs us does not know we were dead
+            -- so we increment incarnation and start spreading
+            -- the rumor with our current payload
+            event.ttl = members.count()
+            event.incarnation = event.incarnation + 1
+            event.payload = myself.payload
         end
     end
 
@@ -124,7 +137,7 @@ function events.handle(event)
     elseif member.status ~= event.status or member.incarnation ~= event.incarnation then
         log.info('Rumor: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
     end
-    members.set(event.uri, event.status, event.incarnation)
+    members.set(event.uri, event.status, event.incarnation, event.payload)
 end
 
 return events

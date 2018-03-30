@@ -66,6 +66,7 @@ local function send_message(uri, msg_type, msg_data)
         uri = opts.advertise_uri,
         status = opts.ALIVE,
         incarnation = members.myself().incarnation,
+        payload = members.myself().payload,
         ttl = 1,
     }
     table.insert(events_to_send, events.pack(extra_event))
@@ -103,6 +104,7 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
             msg_data[uri] = {
                 status = member.status,
                 incarnation = member.incarnation,
+                payload = member.payload,
             }
         end
     end
@@ -149,7 +151,7 @@ local function handle_message(msg)
         local remote_tbl = msg_data
         for uri, member in pairs(remote_tbl) do
             if events.should_overwrite(member, members.get(uri)) then
-                events.generate(uri, member.status, member.incarnation)
+                events.generate(uri, member.status, member.incarnation, member.payload)
             end
         end
         if msg_type == 'SYNC_REQ' then
@@ -330,7 +332,7 @@ local function init(advertise_host, port)
 
     local advertise_uri = uri_tools.format({host = advertise_host, service = tostring(port)})
     opts.set_advertise_uri(advertise_uri)
-    events.generate(advertise_uri, opts.ALIVE)
+    events.generate(advertise_uri, opts.ALIVE, 1, {})
 
     fiber.create(protocol_loop)
     fiber.create(handle_message_loop)
@@ -343,7 +345,7 @@ local function quit()
     local sock = _sock
     _sock = nil
 
-    -- Then, broadcast the quit status
+    -- Perform artificial events.generate() and instantly send it
     local event = events.pack({
         uri = opts.advertise_uri,
         status = opts.QUIT,
@@ -378,11 +380,23 @@ local function add_member(uri)
     return true
 end
 
+local function set_payload(payload)
+    checks("table")
+    local myself = members.myself()
+    events.generate(
+        opts.advertise_uri,
+        opts.ALIVE,
+        myself.incarnation+1,
+        payload
+    )
+end
+
 return {
     init = init,
     quit = quit,
     pairs = members.pairs,
     members = members.all,
     add_member = add_member,
+    set_payload = set_payload,
     get_advertise_uri = get_advertise_uri
 }
