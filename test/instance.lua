@@ -22,5 +22,11 @@ box.once('tarantool-entrypoint', function ()
 end)
 
 membership = require('membership')
+-- tune periods to speed up test
+opts = require('membership.options')
+opts.PROTOCOL_PERIOD_SECONDS = 0.4
+opts.ACK_TIMEOUT_SECONDS = 0.2
+opts.ANTI_ENTROPY_PERIOD_SECONDS = 1
+
 membership.init('localhost', tonumber(listen))
 _G.is_initialized = true

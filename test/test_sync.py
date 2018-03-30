@@ -8,7 +8,6 @@ import time
 servers_list = [33001, 33002, 33003]
 def check_status(srv, uri, status):
     member = srv.members()[uri]
-    # logging.warn(member)
     return member['status_name'] == status
 
 def test_split(servers, helpers):

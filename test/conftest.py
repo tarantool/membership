@@ -14,6 +14,7 @@ from subprocess import Popen, PIPE, STDOUT
 from threading import Thread
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
+logging.basicConfig(format='%(name)s > %(message)s')
 
 TARANTOOL_CONNECTION_TIMEOUT = 1.0
 
@@ -43,9 +44,10 @@ def helpers():
     return Helpers
 
 def consume_lines(port, pipe):
+    logger = logging.getLogger('localhost:{}'.format(port))
     with pipe:
         for line in iter(pipe.readline, b''):
-            logging.warn("server {}: {}".format(port, line.strip().decode('utf-8')))
+            logger.warn(line.strip().decode('utf-8'))
 
 @pytest.fixture(scope='module')
 def module_tmpdir(request):
