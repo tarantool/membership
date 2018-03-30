@@ -15,6 +15,8 @@ box.cfg({
     memtx_dir = workdir,
     vinyl_dir = workdir,
     wal_dir = workdir,
+    vinyl_memory = 0,
+    memtx_memory = 32*1024*1024,
 })
 box.once('tarantool-entrypoint', function ()
     box.schema.user.grant("guest", 'read,write,execute', 'universe', nil, {if_not_exists = true})
