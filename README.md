@@ -1,3 +1,5 @@
+[![pipeline status](https://gitlab.com/tarantool/ib-core/membership/badges/master/pipeline.svg)](https://gitlab.com/tarantool/ib-core/membership/commits/master)
+
 # Membership library for Tarantool based on a gossip protocol
 
 This library builds a mesh from multiple tarantool instances. The
@@ -12,11 +14,15 @@ even before tarantool `box.cfg` was initialized.
 
 ## API
 
-### init
+- [`init(advertise_host, port)`](#membershipinitadvertise_host-port)
+- [`members()`](#membershipmembers)
+- [`pairs()`](#membershippairs)
+- [`myself()`](#membershipmyself)
+- [`add_member(uri)`](#membershipadd_memberuri)
+- [`set_payload(payload)`](#membershipset_payloadpayload)
+- [`quit()`](#membershipquit)
 
-```lua
-membership.init(advertise_host, port)
-```
+### `membership.init(advertise_host, port)`
 
 Initialize membership module.
 This binds a UDP socket on `0.0.0.0:<port>` and
@@ -26,15 +32,11 @@ sets `advertise_uri = <advertise_host>:<port>`,
 It is possible to call `init()` several times:
 the old socket will be closed and the new opened.
 If `advertise_uri` is changed during `init()`, the old `advertise_uri` will be considered `DEAD`.
-In order to teardown gracefully use function [`quit()`](#quit).
+In order to teardown gracefully use function [`quit()`](#membershipquit).
 
 Returns `true` or raises an error.
 
-### members
-
-```lua
-membership.members()
-```
+### `membership.members()`
 
 Obtain the table with all members known to current instance.
 
@@ -45,7 +47,7 @@ Particular member is represented by the table with fields:
 * `status_name` which can be `alive`, `suspect`, `dead` or `quit`
 * `incarnation` which is incremented every time the instance is being suspected or dead or updates its payload
 * `payload`
-* `timestamp` which is a value of `fiber.time64()`.
+* `timestamp` which is a value of `fiber.time64()`
 `timestamp` corresponds to the last update of status or incarnation.
 `timestamp` is always local and does not depent on other members' clock setting.
 
@@ -65,11 +67,7 @@ Example output:
 ...
 ```
 
-### pairs
-
-```lua
-membership.pairs()
-```
+### `membership.pairs()`
 
 This is a shorthand for
 
@@ -77,30 +75,18 @@ This is a shorthand for
 pairs(membership.members())
 ```
 
-### myself
+### `membership.myself()`
 
-```lua
-membership.myself()
-```
+Returns the same table as `membership.members()[advertise_uri]`.
 
-Returns member table corresponding to `advertise_uri`.
-
-### add_member
-
-```lua
-membership.add_member(uri)
-```
+### `membership.add_member(uri)`
 
 Add member to the mesh and propagate this event to other members.
 It is enough to add member to a single instance and everybody else in group will receive the update with time.
 
 It does not matter who adds whom, the result will be the same.
 
-### set_payload
-
-```lua
-membership.set_payload(payload)
-```
+### `membership.set_payload(payload)`
 
 Payload will be disseminated along with member status.
 The payload is simply a Lua table.
@@ -109,3 +95,10 @@ Various modules can use it to share individual configs.
 `set_payload()` increments `incarnation`.
 
 Returns `true`
+
+
+### `membership.quit()`
+
+Gracefully quit the membership mesh.
+The node will be marked with status `quit` and no other members will ever try to connect it.
+
