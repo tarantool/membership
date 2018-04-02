@@ -232,7 +232,7 @@ local function protocol_step()
         local member = members.get(uri)
         members.set(uri, member.status, member.incarnation)
         return
-    elseif members.get(uri).status == opts.DEAD then
+    elseif members.get(uri).status >= opts.DEAD then
         -- still dead, do nothing
         return
     end
@@ -383,8 +383,15 @@ local function add_member(uri)
         return nil, 'parse error'
     end
 
-    uri = uri_tools.format({host = parts.host, service = parts.service})
-    events.generate(uri, opts.ALIVE)
+    local uri = uri_tools.format({host = parts.host, service = parts.service})
+    local member = members.get(uri)
+    local incarnation = nil
+    if member and member.status == opts.QUIT then
+        incarnation = member.incarnation + 1
+    end
+    
+    events.generate(uri, opts.ALIVE, incarnation)
+
     return true
 end
 

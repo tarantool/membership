@@ -75,21 +75,20 @@ function members.random_alive_uri_list(n, excluding)
     return ret
 end
 
-local function shuffle(tbl)
-    local ret = {}
-    for uri, _ in pairs(tbl) do
-        if uri ~= opts.advertise_uri then
-            table.insert(ret, math.random(#ret+1), uri)
-        end
-    end
-    return ret
-end 
-
 function members.next_shuffled_uri()
     checks()
     if _shuffled_idx > #_shuffled_uri_list then
-        _shuffled_uri_list = shuffle(_all_members)
+        _shuffled_uri_list = {}
         _shuffled_idx = 1
+        for uri, member in pairs(_all_members) do
+            if member.status == opts.QUIT then
+                -- skip
+            elseif uri == opts.advertise_uri then
+                -- skip
+            else
+                table.insert(_shuffled_uri_list, math.random(#_shuffled_uri_list+1), uri)
+            end
+        end
     end
 
     _shuffled_idx = _shuffled_idx + 1
