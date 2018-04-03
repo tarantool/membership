@@ -15,7 +15,7 @@ from threading import Thread
 script_dir = os.path.dirname(os.path.realpath(__file__))
 logging.basicConfig(format='%(name)s > %(message)s')
 
-TARANTOOL_CONNECTION_TIMEOUT = 1.0
+TARANTOOL_CONNECTION_TIMEOUT = 3.0
 MEMBERSHIP_UPDATE_TIMEOUT = 3.0
 
 class Helpers:
