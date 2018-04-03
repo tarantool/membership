@@ -15,8 +15,8 @@ def test_join(servers, helpers):
     helpers.wait_for(check_status, [servers[33002], 'localhost:33001', 'alive'])
 
 def test_quit(servers, helpers):
-    assert servers[33002].conn.eval('return membership.quit()')[0]
-    helpers.wait_for(check_status, [servers[33001], 'localhost:33002', 'quit'])
+    assert servers[33002].conn.eval('return membership.leave()')[0]
+    helpers.wait_for(check_status, [servers[33001], 'localhost:33002', 'left'])
 
 def test_rejoin(servers, helpers):
     assert servers[33002].conn.eval('return membership.init("localhost", 33002)')[0]

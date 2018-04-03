@@ -20,7 +20,7 @@ even before tarantool `box.cfg` was initialized.
 - [`myself()`](#membershipmyself)
 - [`add_member(uri)`](#membershipadd_memberuri)
 - [`set_payload(payload)`](#membershipset_payloadpayload)
-- [`quit()`](#membershipquit)
+- [`leave()`](#membershipleave)
 
 ### `membership.init(advertise_host, port)`
 
@@ -31,8 +31,8 @@ sets `advertise_uri = <advertise_host>:<port>`,
 
 It is possible to call `init()` several times:
 the old socket will be closed and the new opened.
-If `advertise_uri` is changed during `init()`, the old `advertise_uri` will be considered `DEAD`.
-In order to teardown gracefully use function [`quit()`](#membershipquit).
+If `advertise_uri` is changed during `init()`, the old `advertise_uri` will be considered as `DEAD`.
+In order to leave the group gracefully use function [`leave()`](#membershipleave).
 
 Returns `true` or raises an error.
 
@@ -81,7 +81,7 @@ Returns the same table as `membership.members()[advertise_uri]`.
 
 ### `membership.add_member(uri)`
 
-Add member to the mesh and propagate this event to other members.
+Add member to the group and propagate this event to other members.
 It is enough to add member to a single instance and everybody else in group will receive the update with time.
 
 It does not matter who adds whom, the result will be the same.
@@ -97,8 +97,8 @@ Various modules can use it to share individual configs.
 Returns `true`
 
 
-### `membership.quit()`
+### `membership.leave()`
 
-Gracefully quit the membership mesh.
-The node will be marked with status `quit` and no other members will ever try to connect it.
+Gracefully leave the membership group.
+The node will be marked with status `left` and no other members will ever try to connect it.
 

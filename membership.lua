@@ -159,7 +159,7 @@ local function handle_message(msg)
         else
             _sync_trigger:broadcast()
         end
-    elseif msg_type == 'QUIT' then
+    elseif msg_type == 'LEAVE' then
         -- just handle the event
         -- do nothing more
     else
@@ -340,7 +340,7 @@ local function init(advertise_host, port)
     return true
 end
 
-local function quit()
+local function leave()
     -- First, we need to stop all fibers
     local sock = _sock
     _sock = nil
@@ -348,11 +348,11 @@ local function quit()
     -- Perform artificial events.generate() and instantly send it
     local event = events.pack({
         uri = opts.advertise_uri,
-        status = opts.QUIT,
+        status = opts.LEFT,
         incarnation = members.myself().incarnation,
         ttl = members.count(),
     })
-    local msg = msgpack.encode({opts.advertise_uri, 'QUIT', msgpack.NULL, {event}})
+    local msg = msgpack.encode({opts.advertise_uri, 'LEAVE', msgpack.NULL, {event}})
     for _, uri in ipairs(members.random_alive_uri_list(members.count())) do
         local host, port = resolve(uri)
         sock:sendto(host, port, msg)
@@ -386,7 +386,7 @@ local function add_member(uri)
     local uri = uri_tools.format({host = parts.host, service = parts.service})
     local member = members.get(uri)
     local incarnation = nil
-    if member and member.status == opts.QUIT then
+    if member and member.status == opts.LEFT then
         incarnation = member.incarnation + 1
     end
     
@@ -411,7 +411,7 @@ end
 
 return {
     init = init,
-    quit = quit,
+    leave = leave,
     pairs = members.pairs,
     members = members.all,
     add_member = add_member,
