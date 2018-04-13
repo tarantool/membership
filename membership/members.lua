@@ -83,8 +83,6 @@ function members.next_shuffled_uri()
         for uri, member in pairs(_all_members) do
             if member.status == opts.LEFT then
                 -- skip
-            elseif uri == opts.advertise_uri then
-                -- skip
             else
                 table.insert(_shuffled_uri_list, math.random(#_shuffled_uri_list+1), uri)
             end

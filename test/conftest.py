@@ -55,7 +55,8 @@ def module_tmpdir(request):
     return str(dir)
 
 class Server(object):
-    def __init__(self, port, tmpdir):
+    def __init__(self, hostname, port, tmpdir):
+        self.hostname = hostname
         self.port = port
         self.tmpdir = tmpdir
         self.conn = None
@@ -63,6 +64,7 @@ class Server(object):
 
     def start(self):
         env = os.environ.copy()
+        env['TARANTOOL_HOSTNAME'] = str(self.hostname)
         env['TARANTOOL_LISTEN'] = str(self.port)
         env['TARANTOOL_WORKDIR'] = "{}/localhost-{}".format(self.tmpdir, self.port)
 
@@ -91,11 +93,16 @@ class Server(object):
         cmd = "return membership.members()"
         return self.conn.eval(cmd)[0]
 
+    def myself(self):
+        cmd = "return membership.myself()"
+        return self.conn.eval(cmd)[0]
+
 @pytest.fixture(scope="module")
 def servers(request, module_tmpdir, helpers):
     servers = {}
+    hostname = getattr(request.module, "hostname", "localhost")
     for port in getattr(request.module, "servers_list"):
-        srv = Server(port, module_tmpdir)
+        srv = Server(hostname, port, module_tmpdir)
         srv.start()
         request.addfinalizer(srv.kill)
         helpers.wait_for(srv.connect, timeout=TARANTOOL_CONNECTION_TIMEOUT)

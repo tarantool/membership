@@ -97,37 +97,6 @@ function events.generate(uri, status, incarnation, payload)
 end
 
 function events.handle(event)
-    if event.uri == opts.advertise_uri then
-        -- this is a rumor about ourselves
-        local myself = members.myself()
-
-        if event.status ~= opts.ALIVE then
-            if not myself or event.incarnation >= myself.incarnation then
-                -- someone thinks that we are dead
-                log.info('Refuting the rumor that we are dead')
-                event.incarnation = event.incarnation + 1
-                event.status = opts.ALIVE
-                event.payload = myself.payload
-                event.ttl = members.count()
-            end
-        elseif not myself then
-            -- this branch is called from init()
-            event.ttl = members.count()
-
-        elseif event.incarnation > myself.incarnation then
-            -- this branch could be called after quick restart
-            -- when the member who PINGs us does not know we were dead
-            -- so we increment incarnation and start spreading
-            -- the rumor with our current payload
-
-            --also here goes set_payload()
-            
-            event.ttl = members.count()
-            event.incarnation = event.incarnation + 1
-            event.payload = myself.payload
-        end
-    end
-
     -- drop outdated events
     local member = members.get(event.uri)
 

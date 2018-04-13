@@ -125,7 +125,33 @@ local function handle_message(msg)
 
     -- log.warn('Got: %s', json.encode(msgpack.decode(msg) or 'nothing'))
     for _, event in ipairs(new_events or {}) do
-        events.handle(events.unpack(event))
+        local event = events.unpack(event)
+
+        if event.uri == opts.advertise_uri then
+            -- this is a rumor about ourselves
+            local myself = members.myself()
+
+            if event.status ~= opts.ALIVE and event.incarnation >= myself.incarnation then
+                -- someone thinks that we are dead
+                log.info('Refuting the rumor that we are dead')
+                event.incarnation = event.incarnation + 1
+                event.status = opts.ALIVE
+                event.payload = myself.payload
+                event.ttl = members.count()
+            elseif event.incarnation > myself.incarnation then
+                -- this branch is called from set_payload()
+                -- or it could be called after quick restart
+                -- when the member who PINGs us does not know we were dead
+                -- so we increment incarnation and start spreading
+                -- the rumor with our current payload
+                
+                event.ttl = members.count()
+                event.incarnation = event.incarnation + 1
+                event.payload = myself.payload
+            end
+        end
+
+        events.handle(event)
     end
 
     if msg_type == 'PING' then
@@ -232,7 +258,10 @@ local function protocol_step()
         local member = members.get(uri)
         members.set(uri, member.status, member.incarnation)
         return
-    elseif members.get(uri).status >= opts.DEAD then
+    else
+        _resolve_cache[uri] = nil
+    end
+    if members.get(uri).status >= opts.DEAD then
         -- still dead, do nothing
         return
     end
@@ -398,13 +427,11 @@ end
 local function set_payload(payload)
     checks("table")
     local myself = members.myself()
-    -- dirty hack to trigger events.whould_overwrite
-    myself.incarnation = myself.incarnation - 1
-    myself.payload = payload
     events.generate(
         opts.advertise_uri,
         opts.ALIVE,
-        myself.incarnation + 1
+        myself.incarnation + 1,
+        payload
     )
     return true
 end

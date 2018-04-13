@@ -9,6 +9,7 @@ end
 
 local listen = os.getenv('TARANTOOL_LISTEN')
 local workdir = os.getenv('TARANTOOL_WORKDIR') or './tmp'
+local hostname = os.getenv('TARANTOOL_HOSTNAME') or 'localhost'
 os.execute('mkdir -p ' .. workdir)
 box.cfg({
     listen = listen,
@@ -31,5 +32,5 @@ opts.ACK_TIMEOUT_SECONDS = 0.2
 opts.ANTI_ENTROPY_PERIOD_SECONDS = 1.0
 opts.SUSPECT_TIMEOUT_SECONDS = 1.0
 
-membership.init('localhost', tonumber(listen))
+membership.init(hostname, tonumber(listen))
 _G.is_initialized = true
