@@ -81,7 +81,7 @@ function members.next_shuffled_uri()
         _shuffled_uri_list = {}
         _shuffled_idx = 1
         for uri, member in pairs(_all_members) do
-            if member.status == opts.QUIT then
+            if member.status == opts.LEFT then
                 -- skip
             elseif uri == opts.advertise_uri then
                 -- skip

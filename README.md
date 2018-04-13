@@ -44,7 +44,7 @@ Returns table with `{uri=member}` pairs.
 Particular member is represented by the table with fields:
 * `uri`
 * `status` (numeric value)
-* `status_name` which can be `alive`, `suspect`, `dead` or `quit`
+* `status_name` which can be `alive`, `suspect`, `dead` or `left`
 * `incarnation` which is incremented every time the instance is being suspected or dead or updates its payload
 * `payload`
 * `timestamp` which is a value of `fiber.time64()`
