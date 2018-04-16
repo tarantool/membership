@@ -139,8 +139,7 @@ local function handle_message(msg)
                 event.payload = myself.payload
                 event.ttl = members.count()
             elseif event.incarnation > myself.incarnation then
-                -- this branch is called from set_payload()
-                -- or it could be called after quick restart
+                -- this branch can be called after quick restart
                 -- when the member who PINGs us does not know we were dead
                 -- so we increment incarnation and start spreading
                 -- the rumor with our current payload
@@ -429,7 +428,7 @@ local function set_payload(payload)
     local myself = members.myself()
     events.generate(
         opts.advertise_uri,
-        opts.ALIVE,
+        myself.status,
         myself.incarnation + 1,
         payload
     )
