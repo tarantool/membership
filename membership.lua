@@ -454,7 +454,7 @@ return {
     init = init,
     leave = leave,
     members = get_members,
-    pairs = function() return pairs(get_members) end,
+    pairs = function() return pairs(get_members()) end,
     myself = get_myself,
     add_member = add_member,
     set_payload = set_payload,
