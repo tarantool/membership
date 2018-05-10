@@ -12,6 +12,32 @@ the [SWIM](docs/swim-paper.pdf) algorithm.
 Membership module works over UDP protocol and can operate
 even before tarantool `box.cfg` was initialized.
 
+## Member data structure
+
+A member is represented by the table with fields:
+* `uri`
+* `status_name` is a string: `alive`, `suspect`, `dead` or `left`
+* `status` (numeric value)
+* `incarnation` which is incremented every time the instance is being suspected or dead or updates its payload
+* `payload` is a table with auxiliary data, which can be used by various modules to do whatever they want
+* `timestamp` is a value of `fiber.time64()`
+`timestamp` corresponds to the last update of status or incarnation.
+`timestamp` is always local and does not depent on other members' clock setting.
+
+Example:
+
+```yaml
+---
+uri: localhost:33001
+status: 1
+status_name: alive
+incarnation: 1
+payload:
+    uuid: 2d00c500-2570-4019-bfcc-ab25e5096b73
+timestamp: 1522427330993752
+...
+```
+
 ## API
 
 - [`init(advertise_host, port)`](#membershipinitadvertise_host-port)
@@ -38,46 +64,18 @@ Returns `true` or raises an error.
 
 ### `membership.members()`
 
-Obtain the table with all members known to current instance.
-
-Returns table with `{uri=member}` pairs.
-Particular member is represented by the table with fields:
-* `uri`
-* `status` (numeric value)
-* `status_name` which can be `alive`, `suspect`, `dead` or `left`
-* `incarnation` which is incremented every time the instance is being suspected or dead or updates its payload
-* `payload`
-* `timestamp` which is a value of `fiber.time64()`
-`timestamp` corresponds to the last update of status or incarnation.
-`timestamp` is always local and does not depent on other members' clock setting.
-
+Obtain all members known to the current instance.
 Editing this table has no effect.
 
-Example output:
-
-```yaml
----
-- localhost:33001:
-    payload: []
-    uri: localhost:33001
-    status: 1
-    status_name: alive
-    timestamp: 1522427330993752
-    incarnation: 1
-...
-```
+Returns table with `{uri=member}` pairs.
 
 ### `membership.pairs()`
 
-This is a shorthand for
-
-```lua
-pairs(membership.members())
-```
+This is a shorthand for `pairs(membership.members())`
 
 ### `membership.myself()`
 
-Returns the same table as `membership.members()[advertise_uri]`.
+This is a shorthand for `membership.members()[advertise_uri]`.
 
 ### `membership.add_member(uri)`
 
@@ -86,16 +84,13 @@ It is enough to add member to a single instance and everybody else in group will
 
 It does not matter who adds whom, the result will be the same.
 
-### `membership.set_payload(payload)`
+### `membership.set_payload(key, value)`
 
-Payload will be disseminated along with member status.
-The payload is simply a Lua table.
-Various modules can use it to share individual configs.
+Update `myself().payload` and disseminate it along with member status.
 
-`set_payload()` increments `incarnation`.
+It also increments `incarnation`.
 
-Returns `true`
-
+Returns `true`.
 
 ### `membership.leave()`
 

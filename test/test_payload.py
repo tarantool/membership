@@ -13,10 +13,31 @@ def check_payload(srv, uri, payload):
     assert member['payload'] == payload
 
 def test_payload(servers, helpers):
-    assert servers[33001].conn.eval('return membership.set_payload({foo = {bar = "buzz"}})')[0]
+    assert servers[33001].conn.eval('return membership.set_payload("foo1", {bar = "buzz"})')[0]
     assert servers[33001].add_member('localhost:33002')
+    helpers.wait_for(check_payload, [
+        servers[33002],
+        'localhost:33001',
+        {
+            'foo1': {'bar': 'buzz'}
+        }
+    ])
 
-    helpers.wait_for(check_payload, [servers[33002], 'localhost:33001', {'foo': {'bar': 'buzz'}}])
+    assert servers[33001].conn.eval('return membership.set_payload("foo2", 42)')[0]
+    helpers.wait_for(check_payload, [
+        servers[33002],
+        'localhost:33001',
+        {
+            'foo1': {'bar': 'buzz'},
+            'foo2': 42
+        }
+    ])
 
-    assert servers[33001].conn.eval('return membership.set_payload({})')[0]
-    helpers.wait_for(check_payload, [servers[33002], 'localhost:33001', []])
+    assert servers[33001].conn.eval('return membership.set_payload("foo1", nil)')[0]
+    helpers.wait_for(check_payload, [
+        servers[33002],
+        'localhost:33001',
+        {
+            'foo2': 42
+        }
+    ])

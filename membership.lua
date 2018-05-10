@@ -423,9 +423,11 @@ local function add_member(uri)
     return true
 end
 
-local function set_payload(payload)
-    checks("table")
+local function set_payload(key, value)
+    checks("string", "?")
     local myself = members.myself()
+    local payload = myself.payload
+    payload[key] = value
     events.generate(
         opts.advertise_uri,
         myself.status,
