@@ -9,7 +9,7 @@ servers_list = [33001, 33002]
 
 def check_payload(srv, uri, payload):
     member = srv.members()[uri]
-    assert member['status_name'] == 'alive'
+    assert member['status'] == 'alive'
     assert member['payload'] == payload
 
 def test_payload(servers, helpers):

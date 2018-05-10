@@ -24,23 +24,8 @@ function members.clear()
     _shuffled_idx = 1
 end
 
-function members.all()
-    local ret = {}
-    for uri, member in pairs(_all_members) do
-        ret[uri] = {
-            uri = uri,
-            status = member.status,
-            status_name = opts.STATUS_NAMES[member.status] or tostring(member.status),
-            payload = member.payload,
-            incarnation = member.incarnation,
-            timestamp = member.timestamp,
-        }
-    end
-    return ret
-end
-
 function members.pairs()
-    return pairs(members.all())
+    return pairs(_all_members)
 end
 
 function members.myself()

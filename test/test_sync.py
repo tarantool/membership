@@ -9,7 +9,7 @@ servers_list = [33001, 33002]
 
 def check_status(srv, uri, status):
     member = srv.members()[uri]
-    assert member['status_name'] == status
+    assert member['status'] == status
 
 def test_sync(servers, helpers):
     assert servers[33001].add_member('localhost:33088')

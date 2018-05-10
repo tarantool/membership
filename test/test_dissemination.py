@@ -10,7 +10,7 @@ servers_list = range(33001, 33012) # 10 instances
 def check_everybody(servers, uri, status):
     for port, srv in servers.items():
         member = srv.members()[uri]
-        assert member['status_name'] == status
+        assert member['status'] == status
 
 def test_dissemination(servers, helpers):
     for port, srv in servers.items():

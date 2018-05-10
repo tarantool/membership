@@ -392,12 +392,25 @@ local function leave()
     return true
 end
 
+function get_members()
+    local ret = {}
+    for uri, member in members.pairs() do
+        ret[uri] = {
+            uri = uri,
+            status = opts.STATUS_NAMES[member.status] or tostring(member.status),
+            payload = member.payload,
+            incarnation = member.incarnation,
+            timestamp = member.timestamp,
+        }
+    end
+    return ret
+end
+
 local function get_myself()
     local myself = members.myself()
     return {
         uri = opts.advertise_uri,
-        status = myself.status,
-        status_name = opts.STATUS_NAMES[myself.status] or tostring(myself.status),
+        status = opts.STATUS_NAMES[myself.status] or tostring(myself.status),
         payload = myself.payload,
         incarnation = myself.incarnation,
         timestamp = myself.timestamp,
@@ -440,9 +453,9 @@ end
 return {
     init = init,
     leave = leave,
-    pairs = members.pairs,
-    members = members.all,
+    members = get_members,
+    pairs = function() return pairs(get_members) end,
+    myself = get_myself,
     add_member = add_member,
     set_payload = set_payload,
-    myself = get_myself,
 }

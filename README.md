@@ -16,8 +16,7 @@ even before tarantool `box.cfg` was initialized.
 
 A member is represented by the table with fields:
 * `uri`
-* `status_name` is a string: `alive`, `suspect`, `dead` or `left`
-* `status` (numeric value)
+* `status` is a string: `alive`, `suspect`, `dead` or `left`
 * `incarnation` which is incremented every time the instance is being suspected or dead or updates its payload
 * `payload` is a table with auxiliary data, which can be used by various modules to do whatever they want
 * `timestamp` is a value of `fiber.time64()`
@@ -29,8 +28,7 @@ Example:
 ```yaml
 ---
 uri: localhost:33001
-status: 1
-status_name: alive
+status: alive
 incarnation: 1
 payload:
     uuid: 2d00c500-2570-4019-bfcc-ab25e5096b73
