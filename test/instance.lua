@@ -12,7 +12,6 @@ local workdir = os.getenv('TARANTOOL_WORKDIR') or './tmp'
 local hostname = os.getenv('TARANTOOL_HOSTNAME') or 'localhost'
 os.execute('mkdir -p ' .. workdir)
 box.cfg({
-    listen = listen,
     memtx_dir = workdir,
     vinyl_dir = workdir,
     wal_dir = workdir,
@@ -23,6 +22,9 @@ box.once('tarantool-entrypoint', function ()
     box.schema.user.grant("guest", 'read,write,execute', 'universe', nil, {if_not_exists = true})
     box.schema.user.grant("guest", 'replication',        nil,        nil, {if_not_exists = true})
 end)
+box.cfg({
+    listen = listen,
+})
 
 membership = require('membership')
 -- tune periods to speed up test
