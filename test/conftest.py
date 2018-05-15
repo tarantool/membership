@@ -15,7 +15,7 @@ from threading import Thread
 script_dir = os.path.dirname(os.path.realpath(__file__))
 logging.basicConfig(format='%(name)s > %(message)s')
 
-TARANTOOL_CONNECTION_TIMEOUT = 3.0
+TARANTOOL_CONNECTION_TIMEOUT = 10.0
 MEMBERSHIP_UPDATE_TIMEOUT = 3.0
 
 class Helpers:
@@ -73,6 +73,7 @@ class Server(object):
         Thread(target=consume_lines, args=[self.port, self.process.stdout]).start()
 
     def connect(self):
+        assert self.process.poll() is None
         if self.conn == None:
             self.conn = tarantool.connect('127.0.0.1', self.port)
         assert self.conn.eval('return is_initialized')[0]
