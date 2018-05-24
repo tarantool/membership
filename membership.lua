@@ -440,6 +440,10 @@ local function set_payload(key, value)
     checks("string", "?")
     local myself = members.myself()
     local payload = myself.payload
+    if payload[key] == value then
+        return true
+    end
+    
     payload[key] = value
     events.generate(
         opts.advertise_uri,
