@@ -54,13 +54,15 @@ local function send_message(uri, msg_type, msg_data)
 
     local events_to_send = {}
 
-    local extra_event = events.get(uri) or {
-        uri = uri,
-        status = members.get(uri).status,
-        incarnation = members.get(uri).incarnation,
-        ttl = 1,
-    }
-    table.insert(events_to_send, events.pack(extra_event))
+    if members.get(uri) then
+        local extra_event = events.get(uri) or {
+            uri = uri,
+            status = members.get(uri).status,
+            incarnation = members.get(uri).incarnation,
+            ttl = 1,
+        }
+        table.insert(events_to_send, events.pack(extra_event))
+    end
 
     local extra_event = events.get(opts.advertise_uri) or {
         uri = opts.advertise_uri,
@@ -436,6 +438,27 @@ local function add_member(uri)
     return true
 end
 
+local function probe_uri(uri)
+    checks("string")
+    local parts = uri_tools.parse(uri)
+    if not parts then
+        return nil, 'parse error'
+    end
+
+    local uri = uri_tools.format({host = parts.host, service = parts.service})
+
+    local loop_now = fiber.time64()
+    local msg_data = {
+        ts = loop_now,
+        src = opts.advertise_uri,
+        dst = uri,
+    }
+
+    local ok = send_message(uri, 'PING', msg_data)
+
+    return ok and wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
+end
+
 local function set_payload(key, value)
     checks("string", "?")
     local myself = members.myself()
@@ -460,6 +483,7 @@ return {
     members = get_members,
     pairs = function() return pairs(get_members()) end,
     myself = get_myself,
+    probe_uri = probe_uri,
     add_member = add_member,
     set_payload = set_payload,
 }

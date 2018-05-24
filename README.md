@@ -43,6 +43,7 @@ timestamp: 1522427330993752
 - [`pairs()`](#membershippairs)
 - [`myself()`](#membershipmyself)
 - [`add_member(uri)`](#membershipadd_memberuri)
+- [`probe_uri(uri)`](#membershipprobe_uriuri)
 - [`set_payload(payload)`](#membershipset_payloadpayload)
 - [`leave()`](#membershipleave)
 
@@ -81,6 +82,13 @@ Add member to the group and propagate this event to other members.
 It is enough to add member to a single instance and everybody else in group will receive the update with time.
 
 It does not matter who adds whom, the result will be the same.
+
+### `membership.probe_uri(uri)`
+
+Send a message to the member.
+The member is added to the group only if it responds.
+
+Returns `true` if member responds within 0.2 seconds, else returns `false`.
 
 ### `membership.set_payload(key, value)`
 
