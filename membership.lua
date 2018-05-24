@@ -398,7 +398,7 @@ function get_members()
         ret[uri] = {
             uri = uri,
             status = opts.STATUS_NAMES[member.status] or tostring(member.status),
-            payload = member.payload,
+            payload = member.payload or {},
             incarnation = member.incarnation,
             timestamp = member.timestamp,
         }
