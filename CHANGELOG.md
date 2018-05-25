@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 - API method `probe_uri()`
+- API method `get_member()`
 
 ### Changed
 - API method `set_payload()` now sets only the given key within payload table

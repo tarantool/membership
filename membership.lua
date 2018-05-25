@@ -394,29 +394,36 @@ local function leave()
     return true
 end
 
+function _member_pack(uri, member)
+    checks("string", "?table")
+    if not member then
+        return nil
+    end
+    return {
+        uri = uri,
+        status = opts.STATUS_NAMES[member.status] or tostring(member.status),
+        payload = member.payload or {},
+        incarnation = member.incarnation,
+        timestamp = member.timestamp,
+    }
+end
+
 function get_members()
     local ret = {}
     for uri, member in members.pairs() do
-        ret[uri] = {
-            uri = uri,
-            status = opts.STATUS_NAMES[member.status] or tostring(member.status),
-            payload = member.payload or {},
-            incarnation = member.incarnation,
-            timestamp = member.timestamp,
-        }
+        ret[uri] = _member_pack(uri, member)
     end
     return ret
 end
 
+local function get_member(uri)
+    local member = members.get(uri)
+    return _member_pack(uri, member)
+end
+
 local function get_myself()
     local myself = members.myself()
-    return {
-        uri = opts.advertise_uri,
-        status = opts.STATUS_NAMES[myself.status] or tostring(myself.status),
-        payload = myself.payload,
-        incarnation = myself.incarnation,
-        timestamp = myself.timestamp,
-    }
+    return _member_pack(opts.advertise_uri, myself)
 end
 
 local function add_member(uri)
@@ -485,5 +492,6 @@ return {
     myself = get_myself,
     probe_uri = probe_uri,
     add_member = add_member,
+    get_member = get_member,
     set_payload = set_payload,
 }

@@ -39,9 +39,10 @@ timestamp: 1522427330993752
 ## API
 
 - [`init(advertise_host, port)`](#membershipinitadvertise_host-port)
+- [`myself()`](#membershipmyself)
+- [`get_member(uri)`](#membershipget_memberuri)
 - [`members()`](#membershipmembers)
 - [`pairs()`](#membershippairs)
-- [`myself()`](#membershipmyself)
 - [`add_member(uri)`](#membershipadd_memberuri)
 - [`probe_uri(uri)`](#membershipprobe_uriuri)
 - [`set_payload(payload)`](#membershipset_payloadpayload)
@@ -61,25 +62,31 @@ In order to leave the group gracefully use function [`leave()`](#membershipleave
 
 Returns `true` or raises an error.
 
+### `membership.myself()`
+
+Returns [member data structure](#member-data-structure) describing myself.
+
+### `membership.get_member(uri)`
+
+Returns [member data structure](#member-data-structure) for corresponding `uri`.
+
 ### `membership.members()`
 
 Obtain all members known to the current instance.
 Editing this table has no effect.
 
-Returns table with `{uri=member}` pairs.
+Returns table with `uri` keys and
+[member data structures](#member-data-structure) as values.
 
 ### `membership.pairs()`
 
 This is a shorthand for `pairs(membership.members())`
 
-### `membership.myself()`
-
-This is a shorthand for `membership.members()[advertise_uri]`.
-
 ### `membership.add_member(uri)`
 
 Add member to the group and propagate this event to other members.
-It is enough to add member to a single instance and everybody else in group will receive the update with time.
+It is enough to add member to a single instance
+and everybody else in group will receive the update with time.
 
 It does not matter who adds whom, the result will be the same.
 
@@ -101,5 +108,6 @@ Returns `true`.
 ### `membership.leave()`
 
 Gracefully leave the membership group.
-The node will be marked with status `left` and no other members will ever try to connect it.
+The node will be marked with status `left`
+and no other members will ever try to connect it.
 
