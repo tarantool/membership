@@ -462,8 +462,16 @@ local function probe_uri(uri)
     }
 
     local ok = send_message(uri, 'PING', msg_data)
+    if not ok then
+        return nil, 'ping was not sent'
+    end
 
-    return ok and wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
+    local ack = wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
+    if not ack then
+        return nil, 'no responce'
+    end
+
+    return true
 end
 
 local function set_payload(key, value)

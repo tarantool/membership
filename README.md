@@ -95,7 +95,7 @@ It does not matter who adds whom, the result will be the same.
 Send a message to the member.
 The member is added to the group only if it responds.
 
-Returns `true` if member responds within 0.2 seconds, else returns `false`.
+Returns `true` if member responds within 0.2 seconds, else returns `nil, error`.
 
 ### `membership.set_payload(key, value)`
 
