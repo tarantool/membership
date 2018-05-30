@@ -7,6 +7,8 @@ local fiber = require('fiber')
 local checks = require('checks')
 local socket = require('socket')
 local msgpack = require('msgpack')
+local cbc = require('crypto').cipher.aes256.cbc
+
 
 local opts = require('membership.options')
 local events = require('membership.events')
@@ -20,7 +22,7 @@ local _ack_cache = {}
 local _resolve_cache = {}
 local function resolve(uri)
     checks("string")
-    
+
     local _cached = _resolve_cache[uri]
     if _cached then
         return unpack(_cached)
@@ -88,6 +90,13 @@ local function send_message(uri, msg_type, msg_data)
     events.gc()
 
     local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, events_to_send})
+    if opts.encryption_key ~= nil then
+        msg = cbc.encrypt(
+            msg,
+            opts.encryption_key,
+            opts.ENCRYPTION_INIT
+        )
+    end
     local ret = _sock:sendto(host, port, msg)
     return ret and ret > 0
 end
@@ -112,6 +121,13 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     end
 
     local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})
+    if opts.encryption_key ~= nil then
+        msg = cbc.encrypt(
+            msg,
+            opts.encryption_key,
+            opts.ENCRYPTION_INIT
+        )
+    end
     local ret = _sock:sendto(host, port, msg)
     return ret and ret > 0
 end
@@ -121,6 +137,13 @@ end
 --
 
 local function handle_message(msg)
+    if opts.encryption_key ~= nil then
+        msg = cbc.decrypt(
+            msg,
+            opts.encryption_key,
+            opts.ENCRYPTION_INIT
+        )
+    end
     local msg, _ = msgpack.decode(msg)
     local sender_uri, msg_type, msg_data, new_events = unpack(msg)
     -- log.warn('FROM: %s', tostring(sender_uri))
@@ -145,7 +168,7 @@ local function handle_message(msg)
                 -- when the member who PINGs us does not know we were dead
                 -- so we increment incarnation and start spreading
                 -- the rumor with our current payload
-                
+
                 event.ttl = members.count()
                 event.incarnation = event.incarnation + 1
                 event.payload = myself.payload
@@ -387,7 +410,7 @@ local function leave()
         local host, port = resolve(uri)
         sock:sendto(host, port, msg)
     end
-    
+
     sock:close()
     members.clear()
     events.clear()
@@ -439,7 +462,7 @@ local function add_member(uri)
     if member and member.status == opts.LEFT then
         incarnation = member.incarnation + 1
     end
-    
+
     events.generate(uri, opts.ALIVE, incarnation)
 
     return true
@@ -481,7 +504,7 @@ local function set_payload(key, value)
     if payload[key] == value then
         return true
     end
-    
+
     payload[key] = value
     events.generate(
         opts.advertise_uri,
@@ -490,6 +513,10 @@ local function set_payload(key, value)
         payload
     )
     return true
+end
+
+local function is_encrypted()
+    return opts.encryption_key ~= nil
 end
 
 return {
@@ -502,4 +529,6 @@ return {
     add_member = add_member,
     get_member = get_member,
     set_payload = set_payload,
+    is_encrypted = is_encrypted,
+    set_encryption_key = opts.set_encryption_key
 }

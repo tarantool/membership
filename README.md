@@ -111,3 +111,15 @@ Gracefully leave the membership group.
 The node will be marked with status `left`
 and no other members will ever try to connect it.
 
+### `membership.is_encrypted()`
+
+Returns `true` if encryption enabled.
+
+Returns `false` if encryption disabled.
+
+### `membership.set_encryption_key(key)`
+
+If `key` == nil, then disable encryption.
+
+If `key` is string, then enable encryption and use symmetric algorithm with this
+key.
