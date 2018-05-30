@@ -38,7 +38,7 @@ function members.get(uri)
 end
 
 function members.random_alive_uri_list(n, excluding)
-    checks()
+    checks('number', '?string')
     local ret = {}
 
     for uri, member in pairs(_all_members) do
