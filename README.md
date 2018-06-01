@@ -45,8 +45,10 @@ timestamp: 1522427330993752
 - [`pairs()`](#membershippairs)
 - [`add_member(uri)`](#membershipadd_memberuri)
 - [`probe_uri(uri)`](#membershipprobe_uriuri)
-- [`set_payload(payload)`](#membershipset_payloadpayload)
+- [`set_payload(key, value)`](#membershipset_payloadkey-value)
 - [`leave()`](#membershipleave)
+- [`get_encryption_key(key)`](#membershipget_encryption_keykey)
+- [`set_encryption_key(key)`](#membershipset_encryption_keykey)
 
 ### `membership.init(advertise_host, port)`
 
@@ -119,7 +121,15 @@ Returns `false` if encryption disabled.
 
 ### `membership.set_encryption_key(key)`
 
-If `key` == nil, then disable encryption.
+Setup the key used for low-level message encryption.
+The encryption is handled with the `crypto.cipher.aes256.cbc` tarantool module.
+The `key` is either trimmed or padded automatically to be exactly 32 bytes.
+When `key == nil`, the encryption is disabled.
 
-If `key` is string, then enable encryption and use symmetric algorithm with this
-key.
+In order for members to communicate properly,
+all members must be configured to use the same encryption key.
+Otherwise, members will report the status `non-decryptable`.
+
+### `membership.get_encryption_key(key)`
+
+Retrieve the encryption key being used.

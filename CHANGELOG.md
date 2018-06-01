@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - API method `probe_uri()`
 - API method `get_member()`
+- Low-level encryption support
+- API methods `set_encryption_key()`, `get_encryption_key()`
 
 ### Changed
 - API method `set_payload()` now sets only the given key within payload table

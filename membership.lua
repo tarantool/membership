@@ -7,8 +7,6 @@ local fiber = require('fiber')
 local checks = require('checks')
 local socket = require('socket')
 local msgpack = require('msgpack')
-local cbc = require('crypto').cipher.aes256.cbc
-
 
 local opts = require('membership.options')
 local events = require('membership.events')
@@ -23,9 +21,11 @@ local _resolve_cache = {}
 local function resolve(uri)
     checks("string")
 
-    local _cached = _resolve_cache[uri]
-    if _cached then
-        return unpack(_cached)
+    if members.get(uri).status == opts.ALIVE then
+        local _cached = _resolve_cache[uri]
+        if _cached then 
+            return unpack(_cached)
+        end
     end
 
     local parts = uri_tools.parse(uri)
@@ -41,6 +41,18 @@ local function resolve(uri)
     local _cached = {hosts[1].host, hosts[1].port}
     _resolve_cache[uri] = _cached
     return unpack(_cached)
+end
+local function nslookup(host, port)
+    checks("string", "number")
+
+    for uri, cache in pairs(_resolve_cache) do
+        local cached_host, cached_port = unpack(cache) 
+        if (cached_host == host) and (cached_port == port) then
+            return uri
+        end
+    end
+
+    return nil
 end
 
 --
@@ -90,13 +102,7 @@ local function send_message(uri, msg_type, msg_data)
     events.gc()
 
     local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, events_to_send})
-    if opts.encryption_key ~= nil then
-        msg = cbc.encrypt(
-            msg,
-            opts.encryption_key,
-            opts.ENCRYPTION_INIT
-        )
-    end
+    local msg = opts.encrypt(msg)
     local ret = _sock:sendto(host, port, msg)
     return ret and ret > 0
 end
@@ -121,13 +127,7 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     end
 
     local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})
-    if opts.encryption_key ~= nil then
-        msg = cbc.encrypt(
-            msg,
-            opts.encryption_key,
-            opts.ENCRYPTION_INIT
-        )
-    end
+    local msg = opts.encrypt(msg)
     local ret = _sock:sendto(host, port, msg)
     return ret and ret > 0
 end
@@ -137,14 +137,9 @@ end
 --
 
 local function handle_message(msg)
-    if opts.encryption_key ~= nil then
-        msg = cbc.decrypt(
-            msg,
-            opts.encryption_key,
-            opts.ENCRYPTION_INIT
-        )
-    end
-    local msg, _ = msgpack.decode(msg)
+    msg = opts.decrypt(msg)
+    msg = msgpack.decode(msg)
+
     local sender_uri, msg_type, msg_data, new_events = unpack(msg)
     -- log.warn('FROM: %s', tostring(sender_uri))
 
@@ -221,9 +216,14 @@ local function handle_message_loop()
     local sock = _sock
     while sock == _sock do
         if _sock:readable(opts.PROTOCOL_PERIOD_SECONDS) then
-            local ok, err = xpcall(handle_message, debug.traceback, _sock:recvfrom())
+            local msg, from = _sock:recvfrom()
+            local ok, err = xpcall(handle_message, debug.traceback, msg)
+
             if not ok then
-                log.error(err)
+                local uri = nslookup(from.host, from.port)
+                if uri and members.get(uri).status == opts.DEAD then
+                    events.generate(uri, opts.NONDECRYPTABLE)
+                end
             end
         end
     end
@@ -256,7 +256,6 @@ local function protocol_step()
     local expiry = loop_now - opts.SUSPECT_TIMEOUT_SECONDS * 1.0e6
     for uri, member in members.pairs() do
         if member.status == opts.SUSPECT and member.timestamp < expiry then
-            log.info('Suspected node timeout.')
             events.generate(uri, opts.DEAD)
         end
     end
@@ -282,8 +281,6 @@ local function protocol_step()
         local member = members.get(uri)
         members.set(uri, member.status, member.incarnation)
         return
-    else
-        _resolve_cache[uri] = nil
     end
     if members.get(uri).status >= opts.DEAD then
         -- still dead, do nothing
@@ -515,10 +512,6 @@ local function set_payload(key, value)
     return true
 end
 
-local function is_encrypted()
-    return opts.encryption_key ~= nil
-end
-
 return {
     init = init,
     leave = leave,
@@ -529,6 +522,6 @@ return {
     add_member = add_member,
     get_member = get_member,
     set_payload = set_payload,
-    is_encrypted = is_encrypted,
+    get_encryption_key = opts.get_encryption_key,
     set_encryption_key = opts.set_encryption_key
 }
