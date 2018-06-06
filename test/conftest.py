@@ -90,6 +90,11 @@ class Server(object):
         # returns: true/false
         return self.conn.eval(cmd)[0]
 
+    def probe_uri(self, uri):
+        cmd = "return membership.probe_uri('{}')".format(uri)
+        # returns: true/false
+        return self.conn.eval(cmd)[0]
+
     def members(self):
         cmd = "return membership.members()"
         return self.conn.eval(cmd)[0]
