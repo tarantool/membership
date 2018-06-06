@@ -12,7 +12,7 @@ def check_payload(srv, uri, payload):
     assert member['status'] == 'alive'
     assert member['payload'] == payload
 
-def test_payload(servers, helpers):
+def test(servers, helpers):
     assert servers[33001].conn.eval('return membership.set_payload("foo1", {bar = "buzz"})')[0]
     assert servers[33001].add_member('localhost:33002')
     helpers.wait_for(check_payload, [

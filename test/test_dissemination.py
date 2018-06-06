@@ -12,10 +12,9 @@ def check_everybody(servers, uri, status):
         member = srv.members()[uri]
         assert member['status'] == status
 
-def test_dissemination(servers, helpers):
+def test(servers, helpers):
     for port, srv in servers.items():
-        if port+1 in servers_list:
-            srv.add_member('localhost:{}'.format(port+1))
+        assert servers[33001].probe_uri('localhost:{}'.format(port))
 
     helpers.wait_for(check_everybody, [servers, 'localhost:33001', 'alive'], timeout=5)
     logging.warn('Killing localhost:33001')

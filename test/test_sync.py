@@ -11,7 +11,7 @@ def check_status(srv, uri, status):
     member = srv.members()[uri]
     assert member['status'] == status
 
-def test_sync(servers, helpers):
+def test(servers, helpers):
     assert servers[33001].add_member('localhost:33088')
     helpers.wait_for(check_status, [servers[33001], 'localhost:33088', 'dead'])
     time.sleep(2) # wait for dead events to expire

@@ -11,5 +11,5 @@ def check_myself(srv, status):
     myself = srv.myself()
     assert myself['status'] == status
 
-def test_myself(servers, helpers):
+def test(servers, helpers):
     helpers.wait_for(check_myself, [servers[33001], 'dead'], timeout=5)
