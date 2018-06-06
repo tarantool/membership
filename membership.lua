@@ -21,7 +21,8 @@ local _resolve_cache = {}
 local function resolve(uri)
     checks("string")
 
-    if members.get(uri).status == opts.ALIVE then
+    local member = members.get(uri)
+    if member and members.status == opts.ALIVE then
         local _cached = _resolve_cache[uri]
         if _cached then 
             return unpack(_cached)
@@ -176,6 +177,9 @@ local function handle_message(msg)
     if msg_type == 'PING' then
         if msg_data.dst == opts.advertise_uri then
             send_message(sender_uri, 'ACK', msg_data)
+        elseif sender_uri == opts.advertise_uri then
+            -- seems to be a local loop 
+            -- drop it
         elseif msg_data.dst ~= nil then
             -- forward
             send_message(msg_data.dst, 'PING', msg_data)
