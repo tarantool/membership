@@ -24,7 +24,7 @@ local function resolve(uri)
     local member = members.get(uri)
     if member and members.status == opts.ALIVE then
         local _cached = _resolve_cache[uri]
-        if _cached then 
+        if _cached then
             return unpack(_cached)
         end
     end
@@ -47,7 +47,7 @@ local function nslookup(host, port)
     checks("string", "number")
 
     for uri, cache in pairs(_resolve_cache) do
-        local cached_host, cached_port = unpack(cache) 
+        local cached_host, cached_port = unpack(cache)
         if (cached_host == host) and (cached_port == port) then
             return uri
         end
@@ -178,7 +178,7 @@ local function handle_message(msg)
         if msg_data.dst == opts.advertise_uri then
             send_message(sender_uri, 'ACK', msg_data)
         elseif sender_uri == opts.advertise_uri then
-            -- seems to be a local loop 
+            -- seems to be a local loop
             -- drop it
         elseif msg_data.dst ~= nil then
             -- forward
@@ -383,10 +383,39 @@ local function init(advertise_host, port)
         error('Socket bind error')
     end
     _sock:nonblock(true)
+    _sock:setsockopt('SOL_SOCKET', 'SO_BROADCAST', 1)
 
     local advertise_uri = uri_tools.format({host = advertise_host, service = tostring(port)})
     opts.set_advertise_uri(advertise_uri)
     events.generate(advertise_uri, opts.ALIVE, 1, {})
+
+    repeat -- broadcast
+        local host, port, err = resolve(advertise_uri)
+        if not host then
+            log.warn('Membership BROADCAST impossible: %s', err)
+            break
+        end
+        local broadcast_uri = host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.%3.255')
+
+        local msg_data = {
+            ts = fiber.time64(),
+            src = opts.advertise_uri,
+            dst = opts.advertise_uri,
+        }
+
+        -- discover neighbour ports too
+        local broadcast_ports = {
+            [port-1] = true,
+            [port] = true,
+            [port+1] = true,
+            [3301] = true,
+        }
+        for p, _ in pairs(broadcast_ports) do
+            local uri = string.format('%s:%s', broadcast_uri, p)
+            log.info('Membership BROADCAST %s', uri)
+            send_message(uri, 'PING', msg_data)
+        end
+    until true
 
     fiber.create(protocol_loop)
     fiber.create(handle_message_loop)
