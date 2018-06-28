@@ -389,37 +389,39 @@ local function init(advertise_host, port)
     opts.set_advertise_uri(advertise_uri)
     events.generate(advertise_uri, opts.ALIVE, 1, {})
 
-    repeat -- broadcast
-        local host, port, err = resolve(advertise_uri)
-        if not host then
-            log.warn('Membership BROADCAST impossible: %s', err)
-            break
-        end
-        local broadcast_uri = host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.%3.255')
-
-        local msg_data = {
-            ts = fiber.time64(),
-            src = opts.advertise_uri,
-            dst = opts.advertise_uri,
-        }
-
-        -- discover neighbour ports too
-        local broadcast_ports = {
-            [port-1] = true,
-            [port] = true,
-            [port+1] = true,
-            [3301] = true,
-        }
-        for p, _ in pairs(broadcast_ports) do
-            local uri = string.format('%s:%s', broadcast_uri, p)
-            log.info('Membership BROADCAST %s', uri)
-            send_message(uri, 'PING', msg_data)
-        end
-    until true
-
     fiber.create(protocol_loop)
     fiber.create(handle_message_loop)
     fiber.create(anti_entropy_loop)
+    return true
+end
+
+local function broadcast()
+    local host, port, err = resolve(opts.advertise_uri)
+    if not host then
+        log.warn('Membership BROADCAST impossible: %s', err)
+        return false
+    end
+    local broadcast_uri = host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.%3.255')
+
+    local msg_data = {
+        ts = fiber.time64(),
+        src = opts.advertise_uri,
+        dst = opts.advertise_uri,
+    }
+
+    -- discover neighbour ports too
+    local broadcast_ports = {
+        [port-1] = true,
+        [port] = true,
+        [port+1] = true,
+        [3301] = true,
+    }
+    for p, _ in pairs(broadcast_ports) do
+        local uri = string.format('%s:%s', broadcast_uri, p)
+        log.info('Membership BROADCAST %s', uri)
+        send_message(uri, 'PING', msg_data)
+    end
+
     return true
 end
 
@@ -549,6 +551,7 @@ return {
     init = init,
     leave = leave,
     members = get_members,
+    broadcast = broadcast,
     pairs = function() return pairs(get_members()) end,
     myself = get_myself,
     probe_uri = probe_uri,

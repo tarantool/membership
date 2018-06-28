@@ -95,6 +95,11 @@ class Server(object):
         # returns: true/false
         return self.conn.eval(cmd)[0]
 
+    def broadcast(self):
+        cmd = "return membership.broadcast()"
+        # returns: true/false
+        return self.conn.eval(cmd)[0]
+
     def members(self):
         cmd = "return membership.members()"
         return self.conn.eval(cmd)[0]

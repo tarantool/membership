@@ -11,10 +11,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - API method `get_member()`
 - Low-level encryption support
 - API methods `set_encryption_key()`, `get_encryption_key()`
+- API method `broadcast()`
 
 ### Changed
 - API method `set_payload()` now sets only the given key within payload table
-- Hide internal numeric `status` from public API 
+- Hide internal numeric `status` from public API
 
 ## [2.0.0] - 2018-04-03
 ### Changed
