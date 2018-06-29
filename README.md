@@ -45,6 +45,7 @@ timestamp: 1522427330993752
 - [`pairs()`](#membershippairs)
 - [`add_member(uri)`](#membershipadd_memberuri)
 - [`probe_uri(uri)`](#membershipprobe_uriuri)
+- [`broadcast(port)`](#membershipbroadcastport)
 - [`set_payload(key, value)`](#membershipset_payloadkey-value)
 - [`leave()`](#membershipleave)
 - [`get_encryption_key(key)`](#membershipget_encryption_keykey)
@@ -98,6 +99,21 @@ Send a message to the member.
 The member is added to the group only if it responds.
 
 Returns `true` if member responds within 0.2 seconds, else returns `nil, error`.
+
+### `membership.broadcast(port)`
+
+Discover members in local network by sending UDP broadcast message.
+
+Address is obtained from `socket.getaddrinfo(advertise_uri)`,
+broadcast is sent to destinations:
+
+- `127.0.0.255:<port>`
+- `x.255.255.255:<port>`
+- `x.x.255.255:<port>`
+- `x.x.x.255:<port>`
+
+Returns `true` if broadcast was sent,
+returns `false` if `getaddrifo` failed.
 
 ### `membership.set_payload(key, value)`
 

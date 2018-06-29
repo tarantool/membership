@@ -95,8 +95,8 @@ class Server(object):
         # returns: true/false
         return self.conn.eval(cmd)[0]
 
-    def broadcast(self):
-        cmd = "return membership.broadcast()"
+    def broadcast(self, port):
+        cmd = "return membership.broadcast({})".format(port)
         # returns: true/false
         return self.conn.eval(cmd)[0]
 

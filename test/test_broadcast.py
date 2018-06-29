@@ -24,7 +24,7 @@ def check_status(srv, uri, status):
     assert member['status'] == status
 
 def test_join(servers, helpers):
-    servers[33002].broadcast()
+    servers[33002].broadcast(33001)
     helpers.wait_for(check_status, [servers[33002], hostname+':33001', 'alive'])
     helpers.wait_for(check_status, [servers[33001], hostname+':33002', 'alive'])
     assert servers[33001].probe_uri(hostname+':33002') == True
