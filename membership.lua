@@ -401,7 +401,6 @@ local function broadcast()
         log.warn('Membership BROADCAST impossible: %s', err)
         return false
     end
-    local broadcast_uri = host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.%3.255')
 
     local msg_data = {
         ts = fiber.time64(),
@@ -409,19 +408,25 @@ local function broadcast()
         dst = opts.advertise_uri,
     }
 
-    -- discover neighbour ports too
+    local broadcast_hosts = {
+        ['127.0.0.255'] = true,
+        ['255.255.255.255'] = true,
+        [host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.255.255.255')] = true,
+        [host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.255.255')] = true,
+        [host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.%3.255')] = true,
+    }
     local broadcast_ports = {
         [port-1] = true,
         [port] = true,
         [port+1] = true,
         [3301] = true,
     }
-    for p, _ in pairs(broadcast_ports) do
-        local uri = string.format('%s:%s', broadcast_uri, p)
-        log.info('Membership BROADCAST %s', uri)
-        send_message(uri, 'PING', msg_data)
+    for h, _ in pairs(broadcast_hosts) do
+        for p, _ in pairs(broadcast_ports) do
+            local uri = string.format('%s:%s', h, p)
+            send_message(uri, 'PING', msg_data)
+        end
     end
-
     return true
 end
 
