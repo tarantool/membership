@@ -559,5 +559,7 @@ return {
     get_member = get_member,
     set_payload = set_payload,
     get_encryption_key = opts.get_encryption_key,
-    set_encryption_key = opts.set_encryption_key
+    set_encryption_key = opts.set_encryption_key,
+    subscribe = events.subscribe,
+    unsubscribe = events.unsubscribe,
 }

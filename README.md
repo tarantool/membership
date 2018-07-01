@@ -50,6 +50,8 @@ timestamp: 1522427330993752
 - [`leave()`](#membershipleave)
 - [`get_encryption_key(key)`](#membershipget_encryption_keykey)
 - [`set_encryption_key(key)`](#membershipset_encryption_keykey)
+- [`subscribe()`](#membershipsubscribe)
+- [`unsubscribe(cond)`](#membershipunsubscribecond)
 
 ### `membership.init(advertise_host, port)`
 
@@ -149,3 +151,19 @@ Otherwise, members will report the status `non-decryptable`.
 ### `membership.get_encryption_key(key)`
 
 Retrieve the encryption key being used.
+
+### `membership.subscribe()`
+
+Subsctibe for updates in members table.
+
+Returns `fiber.cond` object, which is broadcasted whenever
+members table changes.
+
+### `membership.unsubscribe(cond)`
+
+Remove subscription on `cond`, which was earlier obtained from
+`membership.subscribe()`.
+
+The validity of `cond` is not checked.
+
+Returns `nil`.

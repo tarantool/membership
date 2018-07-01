@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Low-level encryption support
 - API methods `set_encryption_key()`, `get_encryption_key()`
 - API method `broadcast()`
+- API methods `subscribe()`, `unsubscribe()`
 
 ### Changed
 - API method `set_payload()` now sets only the given key within payload table

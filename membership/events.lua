@@ -1,4 +1,5 @@
 local log = require('log')
+local fiber = require('fiber')
 local msgpack = require('msgpack')
 
 local opts = require('membership.options')
@@ -17,6 +18,9 @@ local _all_events = {
 }
 local _expired = {
     -- [uri] = true
+}
+local _subscribers = {
+    -- [fiber.cond] = true
 }
 
 function events.clear()
@@ -113,6 +117,21 @@ function events.handle(event)
         log.info('Rumor: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
     end
     members.set(event.uri, event.status, event.incarnation, event.payload)
+
+    for cond, _ in pairs(_subscribers) do
+        cond:broadcast()
+    end
+end
+
+function events.subscribe()
+    local cond = fiber.cond()
+    _subscribers[cond] = true
+    return cond
+end
+
+function events.unsubscribe(cond)
+    _subscribers[cond] = nil
+    return nil
 end
 
 return events
