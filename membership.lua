@@ -22,7 +22,7 @@ local function resolve(uri)
     checks("string")
 
     local member = members.get(uri)
-    if member and members.status == opts.ALIVE then
+    if member and member.status == opts.ALIVE then
         local _cached = _resolve_cache[uri]
         if _cached then
             return unpack(_cached)
