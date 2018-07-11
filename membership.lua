@@ -138,13 +138,23 @@ end
 --
 
 local function handle_message(msg)
-    msg = opts.decrypt(msg)
-    msg = msgpack.decode(msg)
+    local ok, decrypted = pcall(opts.decrypt, msg)
+    if not ok then
+        return false
+    end
 
-    local sender_uri, msg_type, msg_data, new_events = unpack(msg)
-    -- log.warn('FROM: %s', tostring(sender_uri))
+    local ok, decoded = pcall(msgpack.decode, decrypted)
+    if not ok
+    or type(decoded) ~= 'table'
+    or #decoded ~= 4 then
+        -- sometimes misencrypted messages
+        -- are successfully decodes
+        -- as a valid msgpack with useless data
+        return false
+    end
 
-    -- log.warn('Got: %s', json.encode(msgpack.decode(msg) or 'nothing'))
+    local sender_uri, msg_type, msg_data, new_events = unpack(decoded)
+
     for _, event in ipairs(new_events or {}) do
         local event = events.unpack(event)
 
@@ -212,23 +222,39 @@ local function handle_message(msg)
         -- just handle the event
         -- do nothing more
     else
-        log.error('Unknown message %s', msg_type)
+        error('Unknown message ' .. tostring(msg_type))
+    end
+
+    return true
+end
+
+local function handle_message_step()
+    if not _sock:readable(opts.PROTOCOL_PERIOD_SECONDS) then
+        return
+    end
+
+    local msg, from = _sock:recvfrom()
+    local ok = handle_message(msg)
+
+    if not ok then
+        local uri = nslookup(from.host, from.port)
+        local member = nil
+        if uri ~= nil then
+            member = members.get(uri)
+        end
+        if member and member.status == opts.DEAD then
+            events.generate(uri, opts.NONDECRYPTABLE)
+        end
     end
 end
 
 local function handle_message_loop()
     local sock = _sock
     while sock == _sock do
-        if _sock:readable(opts.PROTOCOL_PERIOD_SECONDS) then
-            local msg, from = _sock:recvfrom()
-            local ok, err = xpcall(handle_message, debug.traceback, msg)
+        local ok, res = xpcall(handle_message_step, debug.traceback)
 
-            if not ok then
-                local uri = nslookup(from.host, from.port)
-                if uri and members.get(uri).status == opts.DEAD then
-                    events.generate(uri, opts.NONDECRYPTABLE)
-                end
-            end
+        if not ok then
+            log.error(res)
         end
     end
 end
