@@ -41,12 +41,6 @@ class Helpers:
 def helpers():
     return Helpers
 
-def consume_lines(port, pipe):
-    logger = logging.getLogger('localhost:{}'.format(port))
-    with pipe:
-        for line in iter(pipe.readline, b''):
-            logger.warn(line.strip().decode('utf-8'))
-
 @pytest.fixture(scope='module')
 def module_tmpdir(request):
     dir = py.path.local(tempfile.mkdtemp())
@@ -56,10 +50,14 @@ def module_tmpdir(request):
 
 class Server(object):
     def __init__(self, hostname, port, tmpdir):
+        self.logger = logging.getLogger('localhost:{}'.format(port))
         self.hostname = hostname
         self.port = port
         self.tmpdir = tmpdir
         self.conn = None
+        self.thread = None
+        self.process = None
+        self.seen_traceback = False
         pass
 
     def start(self):
@@ -70,7 +68,18 @@ class Server(object):
 
         cmd = ["tarantool", os.path.join(script_dir, 'instance.lua')]
         self.process = Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env, bufsize=1)
-        Thread(target=consume_lines, args=[self.port, self.process.stdout]).start()
+        self.thread = Thread(
+            target=self.consume_lines
+        ).start()
+
+    def consume_lines(self):
+        with self.process.stdout as pipe:
+            for line in iter(pipe.readline, b''):
+                l = line.strip().decode('utf-8')
+                self.logger.warn(l)
+                if 'stack traceback:' in l:
+                    self.seen_traceback = True
+
 
     def connect(self):
         assert self.process.poll() is None
@@ -84,6 +93,9 @@ class Server(object):
             self.conn.close()
             self.conn = None
         self.process.kill()
+        logging.warn('localhost:{} killed'.format(self.port))
+        if self.thread != None:
+            self.thread.join()
 
     def add_member(self, uri):
         cmd = "return membership.add_member('{}')".format(uri)
@@ -119,4 +131,10 @@ def servers(request, module_tmpdir, helpers):
         helpers.wait_for(srv.connect, timeout=TARANTOOL_CONNECTION_TIMEOUT)
         # srv.wait()
         servers[port] = srv
-    return servers
+    yield servers
+
+    servers_with_errors = [srv for srv in servers.values() if srv.seen_traceback]
+    for srv in iter(servers_with_errors):
+        logging.warn("Seen traceback on localhost:{}".format(srv.port))
+    if servers_with_errors:
+        pytest.fail("Seen traceback")
