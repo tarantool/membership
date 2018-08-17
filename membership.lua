@@ -233,7 +233,8 @@ local function handle_message_step()
         return
     end
 
-    local msg, from = _sock:recvfrom()
+    -- 1472 = Default-MTU (1500) - IP-Header (20) - UDP-Header (8)
+    local msg, from = _sock:recvfrom(1472)
     local ok = handle_message(msg)
 
     if not ok then
