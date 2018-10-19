@@ -404,10 +404,11 @@ local function init(advertise_host, port)
     checks("string", "number")
 
     _sock = socket('AF_INET', 'SOCK_DGRAM', 'udp')
-    local ok, status, errno, errstr = _sock:bind('0.0.0.0', port)
+    local ok = _sock:bind('0.0.0.0', port)
     if not ok then
-        log.error('%s: %s', status, errstr)
-        error('Socket bind error')
+        local err = string.format('Socket bind error: %s', _sock:error())
+        log.error('%s', err)
+        error(err)
     end
     _sock:nonblock(true)
     _sock:setsockopt('SOL_SOCKET', 'SO_BROADCAST', 1)
