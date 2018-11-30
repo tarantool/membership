@@ -33,7 +33,7 @@ function members.myself()
 end
 
 function members.get(uri)
-    checks("string")
+    checks('string')
     return _all_members[uri]
 end
 
@@ -61,7 +61,6 @@ function members.random_alive_uri_list(n, excluding)
 end
 
 function members.next_shuffled_uri()
-    checks()
     if _shuffled_idx > #_shuffled_uri_list then
         _shuffled_uri_list = {}
         _shuffled_idx = 1
@@ -95,7 +94,6 @@ function members.set(uri, status, incarnation, payload)
 end
 
 function members.count()
-    checks()
     local count = 0
     for _ in pairs(_all_members) do
         count = count + 1

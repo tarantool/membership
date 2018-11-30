@@ -19,7 +19,7 @@ local _ack_cache = {}
 
 local _resolve_cache = {}
 local function resolve(uri)
-    checks("string")
+    checks('string')
 
     local member = members.get(uri)
     if member and member.status == opts.ALIVE then
@@ -44,7 +44,7 @@ local function resolve(uri)
     return unpack(_cached)
 end
 local function nslookup(host, port)
-    checks("string", "number")
+    checks('string', 'number')
 
     for uri, cache in pairs(_resolve_cache) do
         local cached_host, cached_port = unpack(cache)
@@ -61,7 +61,7 @@ end
 --
 
 local function send_message(uri, msg_type, msg_data)
-    checks("string", "string", "table")
+    checks('string', 'string', 'table')
     local host, port = resolve(uri)
     if not host then
         return false
@@ -110,7 +110,7 @@ end
 
 local function send_anti_entropy(uri, msg_type, remote_tbl)
     -- send to `uri` all local members that are not in `remote_tbl`
-    checks("string", "string", "table")
+    checks('string', 'string', 'table')
     local host, port = resolve(uri)
     if not host then
         return false
@@ -329,7 +329,7 @@ local function protocol_step()
         members.set(uri, member.status, member.incarnation)
         return
     elseif members.get(uri).status == opts.ALIVE then
-        log.info("Couldn't reach node: %s", uri)
+        log.info('Could not reach node: %s', uri)
         events.generate(uri, opts.SUSPECT)
         return
     end
@@ -401,7 +401,7 @@ end
 --
 
 local function init(advertise_host, port)
-    checks("string", "number")
+    checks('string', 'number')
 
     _sock = socket('AF_INET', 'SOCK_DGRAM', 'udp')
     local ok = _sock:bind('0.0.0.0', port)
@@ -478,7 +478,7 @@ local function leave()
 end
 
 function _member_pack(uri, member)
-    checks("string", "?table")
+    checks('string', '?table')
     if not member then
         return nil
     end
@@ -510,7 +510,7 @@ local function get_myself()
 end
 
 local function add_member(uri)
-    checks("string")
+    checks('string')
     local parts = uri_tools.parse(uri)
     if not parts then
         return nil, 'parse error'
@@ -529,7 +529,7 @@ local function add_member(uri)
 end
 
 local function probe_uri(uri)
-    checks("string")
+    checks('string')
     local parts = uri_tools.parse(uri)
     if not parts then
         return nil, 'parse error'
@@ -558,7 +558,7 @@ local function probe_uri(uri)
 end
 
 local function set_payload(key, value)
-    checks("string", "?")
+    checks('string', '?')
     local myself = members.myself()
     local payload = myself.payload
     if payload[key] == value then

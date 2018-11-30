@@ -6,7 +6,7 @@ source  = {
 dependencies = {
     'tarantool',
     'lua >= 5.1',
-    'checks ~> 2.0',
+    'checks == 3.0.0-1',
 }
 
 build = {
