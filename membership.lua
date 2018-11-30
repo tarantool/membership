@@ -229,7 +229,10 @@ local function handle_message(msg)
 end
 
 local function handle_message_step()
-    if not _sock:readable(opts.PROTOCOL_PERIOD_SECONDS) then
+    local sock = _sock
+    local ok = _sock:readable(opts.PROTOCOL_PERIOD_SECONDS)
+    -- check that socket was not closed by leave() call yet
+    if not ok or sock ~= _sock then
         return
     end
 
@@ -237,7 +240,7 @@ local function handle_message_step()
     local msg, from = _sock:recvfrom(1472)
     local ok = handle_message(msg)
 
-    if not ok then
+    if not ok and type(from) == 'table' then
         local uri = nslookup(from.host, from.port)
         local member = nil
         if uri ~= nil then
