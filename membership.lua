@@ -11,6 +11,7 @@ local msgpack = require('msgpack')
 local opts = require('membership.options')
 local events = require('membership.events')
 local members = require('membership.members')
+local network = require('membership.network')
 
 local _sock = nil
 local _sync_trigger = fiber.cond()
@@ -429,30 +430,34 @@ end
 local function broadcast(port)
     checks('number')
 
-    local host, _, err = resolve(opts.advertise_uri)
-    if not host then
-        log.warn('Membership BROADCAST impossible: %s', err)
-        return false
-    end
-
     local msg_data = {
         ts = fiber.time64(),
         src = opts.advertise_uri,
         dst = opts.advertise_uri,
     }
 
-    local broadcast_hosts = {
-        ['127.0.0.255'] = true,
-        [host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.255.255.255')] = true,
-        [host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.255.255')] = true,
-        [host:gsub('(%d+)%.(%d+)%.(%d+)%.(%d+)', '%1.%2.%3.255')] = true,
-    }
-    for h, _ in pairs(broadcast_hosts) do
-        local uri = string.format('%s:%s', h, port)
-        send_message(uri, 'PING', msg_data)
+    local ok, netlist = pcall(network.getifaddrs)
+    if not ok then
+        log.warn('Membership BROADCAST impossible: %s', netlist)
+        return false
     end
 
-    log.warn('Membership BROADCAST sent to :%s', port)
+    local bcast_sent = false
+
+    for ifa, addr in pairs(netlist) do
+        local uri = addr.bcast or addr.inet4
+        if uri then
+            local uri = string.format('%s:%s', uri, port)
+            send_message(uri, 'PING', msg_data)
+            log.info('Membership BROADCAST sent to %s', uri)
+            bcast_sent = true
+        end
+    end
+
+    if not bcast_sent then
+        log.warn('Membership BROADCAST not sent: No suitable ifaddrs found')
+        return false
+    end
     return true
 end
 
