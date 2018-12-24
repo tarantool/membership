@@ -44,7 +44,7 @@ def helpers():
 @pytest.fixture(scope='module')
 def module_tmpdir(request):
     dir = py.path.local(tempfile.mkdtemp())
-    logging.warn("Create module_tmpdir: {}".format(str(dir)))
+    logging.warning("Create module_tmpdir: {}".format(str(dir)))
     request.addfinalizer(lambda: dir.remove(rec=1))
     return str(dir)
 
@@ -76,7 +76,7 @@ class Server(object):
         with self.process.stdout as pipe:
             for line in iter(pipe.readline, b''):
                 l = line.strip().decode('utf-8')
-                self.logger.warn(l)
+                self.logger.warning(l)
                 if 'stack traceback:' in l:
                     self.seen_traceback = True
 
@@ -89,11 +89,11 @@ class Server(object):
 
     def kill(self):
         if self.conn != None:
-            # logging.warn('Closing connection to {}'.format(self.port))
+            # logging.warning('Closing connection to {}'.format(self.port))
             self.conn.close()
             self.conn = None
         self.process.kill()
-        logging.warn('localhost:{} killed'.format(self.port))
+        logging.warning('localhost:{} killed'.format(self.port))
         if self.thread != None:
             self.thread.join()
 
@@ -135,6 +135,6 @@ def servers(request, module_tmpdir, helpers):
 
     servers_with_errors = [srv for srv in servers.values() if srv.seen_traceback]
     for srv in iter(servers_with_errors):
-        logging.warn("Seen traceback on localhost:{}".format(srv.port))
+        logging.warning("Seen traceback on localhost:{}".format(srv.port))
     if servers_with_errors:
         pytest.fail("Seen traceback")
