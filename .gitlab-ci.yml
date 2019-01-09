@@ -20,6 +20,5 @@ build:
     - export PATH=.rocks/bin:$PATH
     - pip3.6 install -r test/requirements.txt
   script:
-    - tarantoolctl rocks make
-    - make doc
+    - tarantoolctl rocks make BUILD_DOC=YES
     - pytest -v
