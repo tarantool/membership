@@ -42,7 +42,7 @@ function events.pairs()
 end
 
 function events.pack(event)
-    checks("table")
+    checks('table')
     event.ttl = event.ttl - 1
     if event.ttl <= 0 then
         _expired[event.uri] = true
@@ -65,7 +65,7 @@ function events.gc()
 end
 
 function events.unpack(event)
-    checks("table")
+    checks('table')
     return {
         uri = event[1],
         status = event[2],

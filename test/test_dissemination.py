@@ -17,7 +17,7 @@ def test(servers, helpers):
         assert servers[33001].probe_uri('localhost:{}'.format(port))
 
     helpers.wait_for(check_everybody, [servers, 'localhost:33001', 'alive'], timeout=5)
-    logging.warn('Killing localhost:33001')
+    logging.warning('Killing localhost:33001')
     servers[33001].kill()
     del servers[33001]
     helpers.wait_for(check_everybody, [servers, 'localhost:33001', 'dead'], timeout=5)

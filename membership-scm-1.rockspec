@@ -4,9 +4,8 @@ source  = {
     url = '/dev/null',
 }
 dependencies = {
-    'tarantool',
     'lua >= 5.1',
-    'checks ~> 2.0',
+    'checks == 3.0.0-1',
 }
 
 build = {
@@ -17,6 +16,7 @@ build = {
             ['membership.events'] = 'membership/events.lua';
             ['membership.members'] = 'membership/members.lua';
             ['membership.options'] = 'membership/options.lua';
+            ['membership.network'] = 'membership/network.lua';
         }
     }
 }
