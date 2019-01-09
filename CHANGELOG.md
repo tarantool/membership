@@ -6,8 +6,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.1.1] - 2019-01-09
+
+### Fixed
+
+- Obtain UDP broadcast address from `getifaddrs` C call
+
+### Updated
+
+- Module `checks` dependency updated to v3.0.0
+
 ## [2.1.0] - 2018-09-04
+
 ### Added
+
 - API method `probe_uri()`
 - API method `get_member()`
 - Low-level encryption support
@@ -16,15 +28,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - API methods `subscribe()`, `unsubscribe()`
 
 ### Changed
+
 - API method `set_payload()` now sets only the given key within payload table
 - Hide internal numeric `status` from public API
 
 ## [2.0.0] - 2018-04-03
+
 ### Changed
+
 - Rename API method: `quit()` -> `leave()`
 
 ## [1.0.0] - 2018-04-02
+
 ### Added
+
 - Basic functionality
 - Integration tests
 - Luarock-based packaging
