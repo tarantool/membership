@@ -18,10 +18,10 @@ log.info('Console started at %s', console_sock)
 -- Tune periods to speed up tests
 -- Supposing loopback roundtrip is about 0.1ms
 local opts = require('membership.options')
-opts.PROTOCOL_PERIOD_SECONDS = 0.1
-opts.ACK_TIMEOUT_SECONDS = 0.02
-opts.ANTI_ENTROPY_PERIOD_SECONDS = 1
-opts.SUSPECT_TIMEOUT_SECONDS = 0.5
+opts.PROTOCOL_PERIOD_SECONDS = 0.2
+opts.ACK_TIMEOUT_SECONDS = 0.1
+opts.ANTI_ENTROPY_PERIOD_SECONDS = 2
+opts.SUSPECT_TIMEOUT_SECONDS = 2
 
 -- Monkeypatch socket library to validate MAX_PACKET_SIZE
 local socket_lib = require('socket')
