@@ -1,5 +1,6 @@
 stages:
   - build
+  - publish
 
 build:
   stage: build
@@ -22,3 +23,23 @@ build:
   script:
     - tarantoolctl rocks make BUILD_DOC=YES
     - pytest -v
+    - ./release.sh
+  artifacts:
+    name: "$CI_COMMIT_REF_NAME"
+    paths:
+      - doc/
+      - release/
+      - release-doc/
+
+publish:
+  stage: publish
+  dependencies:
+    - build
+  tags:
+    - shell
+  when: manual
+  only:
+    - tags
+  script:
+    - aws --endpoint-url "${AWS_S3_ENDPOINT_URL}" s3 cp release/*.all.rock "s3://packages/rocks/"
+    - aws --endpoint-url "${AWS_S3_ENDPOINT_URL}" s3 cp --recursive release-doc/ "s3://packages/rocks-doc/"
