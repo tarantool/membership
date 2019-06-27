@@ -135,6 +135,10 @@ class Server(object):
         cmd = "return membership.members()"
         return self.conn.eval(cmd)[0]
 
+    def get_member(self, uri):
+        cmd = "return membership.get_member('{}')".format(uri)
+        return self.conn.eval(cmd)[0]
+
     def myself(self):
         cmd = "return membership.myself()"
         return self.conn.eval(cmd)[0]
