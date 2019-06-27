@@ -6,7 +6,7 @@ import logging
 import time
 
 first = 33001
-count = 10
+count = 100
 servers_list = range(first, first+count)
 
 
@@ -22,10 +22,16 @@ def test_discover_join(servers, helpers):
     servers_copy = {**servers}
     def check_fullmesh():
         for port, srv in list(servers_copy.items()):
-            members = srv.members()
-            alive = [uri for uri, member in members.items() if member['status'] == 'alive']
-            logging.info('Member {} sees {} others'.format(port, len(alive)))
-            if len(alive) == len(servers_list):
+            alive_cnt = srv.conn.eval('''
+                local alive_cnt = 0
+                for uri, m in membership.pairs() do
+                    if m.status == 'alive' then
+                        alive_cnt = alive_cnt + 1
+                    end
+                end
+                return alive_cnt
+            ''')[0]
+            if alive_cnt == len(servers_list):
                 del servers_copy[port]
 
         logging.info('{}/{} ready so far'.format(

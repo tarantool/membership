@@ -65,7 +65,9 @@ class Console(object):
 
             return ''.join(data)
 
-        sendall(cmd.strip() + '\n')
+        lines = [l.strip() for l in cmd.split('\n') if l.strip()]
+        fcmd = ' '.join(lines) + '\n'
+        sendall(fcmd)
         return yaml.safe_load(recvall())
 
 class Server(object):
