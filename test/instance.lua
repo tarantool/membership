@@ -23,8 +23,27 @@ opts.ACK_TIMEOUT_SECONDS = 0.025
 opts.ANTI_ENTROPY_PERIOD_SECONDS = 0.100
 opts.SUSPECT_TIMEOUT_SECONDS = 0.100
 
+-- Monkeypatch socket library to validate MAX_PACKET_SIZE
+local socket_lib = require('socket')
+
+local socket_mt = getmetatable(socket_lib)
+local create_socket = socket_mt.__call
+socket_mt.__call = function(...)
+    log.error('Monkeypatching socket')
+    local sock = create_socket(...)
+    local sendto = sock.sendto
+    function sock.sendto(self, host, port, msg)
+        if #msg > opts.MAX_PACKET_SIZE then
+            log.error('Packet too big, %d > %d', #msg, opts.MAX_PACKET_SIZE)
+            os.exit(220)
+        end
+        return sendto(self, host, port, msg)
+    end
+
+    return sock
+end
+
 local membership = require('membership')
 _G.membership = membership
 membership.init(hostname, tonumber(listen))
-
 _G.is_initialized = true

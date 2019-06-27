@@ -18,6 +18,9 @@ options.NUM_FAILURE_DETECTION_SUBGROUPS = 3 -- denoted as k in SWIM paper
 
 options.EVENT_PIGGYBACK_LIMIT = 10
 
+-- 1472 = Default-MTU (1500) - IP-Header (20) - UDP-Header (8)
+options.MAX_PACKET_SIZE = 1472
+
 options.ENCRYPTION_INIT = 'init-key-16-byte' -- !!KEEP string len SYNCED with cryptoapi
 
 function options.set_advertise_uri(uri)

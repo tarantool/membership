@@ -248,8 +248,7 @@ local function handle_message_step()
         return
     end
 
-    -- 1472 = Default-MTU (1500) - IP-Header (20) - UDP-Header (8)
-    local msg, from = _sock:recvfrom(1472)
+    local msg, from = _sock:recvfrom(opts.MAX_PACKET_SIZE)
     local ok = handle_message(msg)
 
     if not ok and type(from) == 'table' then
