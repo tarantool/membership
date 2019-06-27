@@ -118,6 +118,7 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     end
 
     local msg_data = {}
+    local cnt = 0
     for uri, member in members.pairs() do
         if events.should_overwrite(member, remote_tbl[uri]) then
             msg_data[uri] = {
@@ -125,7 +126,17 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
                 incarnation = member.incarnation,
                 payload = member.payload,
             }
+            cnt = cnt + 1
         end
+    end
+
+    while cnt > opts.EVENT_PIGGYBACK_LIMIT do
+        local uri = nil
+        for _ = 1, math.random(cnt) do
+            uri = next(msg_data, uri)
+        end
+        msg_data[uri] = nil
+        cnt = cnt - 1
     end
 
     local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})

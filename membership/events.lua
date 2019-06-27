@@ -112,9 +112,9 @@ function events.handle(event)
 
     -- update members list
     if not member then
-        log.info('Adding: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
+        log.debug('Adding: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
     elseif member.status ~= event.status or member.incarnation ~= event.incarnation then
-        log.info('Rumor: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
+        log.debug('Rumor: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
     end
     members.set(event.uri, event.status, event.incarnation, event.payload)
 
