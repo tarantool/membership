@@ -2,29 +2,18 @@
 
 require('strict').on()
 local log = require('log')
+local console = require('console')
 
 if rawget(_G, "is_initialized") == nil then
     _G.is_initialized = false
 end
 
 local listen = os.getenv('TARANTOOL_LISTEN')
-local workdir = os.getenv('TARANTOOL_WORKDIR') or './tmp'
 local hostname = os.getenv('TARANTOOL_HOSTNAME') or 'localhost'
-os.execute('mkdir -p ' .. workdir)
-box.cfg({
-    memtx_dir = workdir,
-    vinyl_dir = workdir,
-    wal_dir = workdir,
-    vinyl_memory = 0,
-    memtx_memory = 32*1024*1024,
-})
-box.once('tarantool-entrypoint', function ()
-    box.schema.user.grant("guest", 'read,write,execute', 'universe', nil, {if_not_exists = true})
-    box.schema.user.grant("guest", 'replication',        nil,        nil, {if_not_exists = true})
-end)
-box.cfg({
-    listen = listen,
-})
+
+local console_sock = '127.0.0.1:'..listen
+console.listen(console_sock)
+log.info('Console started at %s', console_sock)
 
 membership = require('membership')
 -- tune periods to speed up test

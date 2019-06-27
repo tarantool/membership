@@ -3,17 +3,18 @@
 
 import os
 import pytest
+import socket
 import logging
 import tempfile
 import py
-import tarantool
 import time
+import yaml
 
 from subprocess import Popen, PIPE, STDOUT
 from threading import Thread
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-logging.basicConfig(format='%(name)s > %(message)s')
+logging.basicConfig(format='%(name)s > %(message)s', level=logging.INFO)
 
 TARANTOOL_CONNECTION_TIMEOUT = 10.0
 MEMBERSHIP_UPDATE_TIMEOUT = 3.0
@@ -41,19 +42,37 @@ class Helpers:
 def helpers():
     return Helpers
 
-@pytest.fixture(scope='module')
-def module_tmpdir(request):
-    dir = py.path.local(tempfile.mkdtemp())
-    logging.warning("Create module_tmpdir: {}".format(str(dir)))
-    request.addfinalizer(lambda: dir.remove(rec=1))
-    return str(dir)
+class Console(object):
+    def __init__(self, addr, port):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((addr, int(port)))
+        self.sock.recv(1024)
+
+    def close(self):
+        return self.sock.close()
+
+    def eval(self, cmd):
+        def sendall(msg):
+            return self.sock.sendall(msg.encode())
+
+        def recvall():
+            data = []
+            while True:
+                chunk = self.sock.recv(1024).decode()
+                data.append(chunk)
+                if chunk.endswith('\n...\n'):
+                    break
+
+            return ''.join(data)
+
+        sendall(cmd.strip() + '\n')
+        return yaml.safe_load(recvall())
 
 class Server(object):
-    def __init__(self, hostname, port, tmpdir):
+    def __init__(self, hostname, port):
         self.logger = logging.getLogger('localhost:{}'.format(port))
         self.hostname = hostname
         self.port = port
-        self.tmpdir = tmpdir
         self.conn = None
         self.thread = None
         self.process = None
@@ -64,7 +83,6 @@ class Server(object):
         env = os.environ.copy()
         env['TARANTOOL_HOSTNAME'] = str(self.hostname)
         env['TARANTOOL_LISTEN'] = str(self.port)
-        env['TARANTOOL_WORKDIR'] = "{}/localhost-{}".format(self.tmpdir, self.port)
 
         cmd = ["tarantool", os.path.join(script_dir, 'instance.lua')]
         self.process = Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env, bufsize=1)
@@ -84,7 +102,8 @@ class Server(object):
     def connect(self):
         assert self.process.poll() is None
         if self.conn == None:
-            self.conn = tarantool.connect('127.0.0.1', self.port)
+            self.conn = Console('127.0.0.1', self.port)
+
         assert self.conn.eval('return is_initialized')[0]
 
     def kill(self):
@@ -121,16 +140,19 @@ class Server(object):
         return self.conn.eval(cmd)[0]
 
 @pytest.fixture(scope="module")
-def servers(request, module_tmpdir, helpers):
+def servers(request, helpers):
     servers = {}
     hostname = getattr(request.module, "hostname", "localhost")
     for port in getattr(request.module, "servers_list"):
-        srv = Server(hostname, port, module_tmpdir)
+        srv = Server(hostname, port)
         srv.start()
         request.addfinalizer(srv.kill)
-        helpers.wait_for(srv.connect, timeout=TARANTOOL_CONNECTION_TIMEOUT)
         # srv.wait()
         servers[port] = srv
+
+    for _, srv in servers.items():
+        helpers.wait_for(srv.connect, timeout=TARANTOOL_CONNECTION_TIMEOUT)
+
     yield servers
 
     servers_with_errors = [srv for srv in servers.values() if srv.seen_traceback]
