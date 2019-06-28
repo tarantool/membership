@@ -174,18 +174,7 @@ local function send_message(uri, msg_type, msg_data)
     events.gc()
 
     local msg_msgpacked = msgpack.encode(msg_raw)
-    assert(#msg_msgpacked == msg_size,
-        string.format('msgpack size differs: %s ~= %s', #msg_msgpacked, msg_size)
-    )
-
     local msg_encrypted = opts.encrypt(msg_msgpacked)
-    assert(#msg_encrypted == opts.encrypted_size(msg_size),
-        string.format('encrypted size differs: %s ~= %s', #msg_encrypted, opts.encrypted_size(msg_size))
-    )
-
-    assert(#msg_encrypted <= opts.MAX_PACKET_SIZE,
-        string.format('Packet too big: %s > %s, %d events', #msg_encrypted, opts.MAX_PACKET_SIZE, #events_to_send)
-    )
     local ret = _sock:sendto(host, port, msg_encrypted)
     return ret and ret > 0
 end
@@ -227,19 +216,7 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     end
 
     local msg_msgpacked = msgpack.encode(msg_raw)
-    assert(#msg_msgpacked == msg_size,
-        string.format('msgpack size differs: %s ~= %s', #msg_msgpacked, msg_size)
-    )
-
     local msg_encrypted = opts.encrypt(msg_msgpacked)
-    assert(#msg_encrypted == opts.encrypted_size(msg_size),
-        string.format('encrypted size differs: %s ~= %s', #msg_encrypted, opts.encrypted_size(msg_size))
-    )
-
-    assert(#msg_encrypted <= opts.MAX_PACKET_SIZE,
-        string.format('Packet too big: %s > %s, %d members',
-            #msg_encrypted, opts.MAX_PACKET_SIZE, #members_to_send)
-    )
     local ret = _sock:sendto(host, port, msg_encrypted)
     return ret and ret > 0
 end
