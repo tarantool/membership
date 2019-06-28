@@ -301,7 +301,7 @@ local function handle_message(msg)
             remote_tbl[member_uri] = member
 
             if events.should_overwrite(member, members.get(member_uri)) then
-                events.generate(uri, member.status, member.incarnation, member.payload)
+                events.generate(member_uri, member.status, member.incarnation, member.payload)
             end
         end
 

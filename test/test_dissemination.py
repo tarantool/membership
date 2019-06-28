@@ -47,7 +47,7 @@ def test_discover_join(servers, helpers):
     t3 = time.time()
     logging.warn('Full mesh in {:.3f}s'.format(t3-t2))
 
-def test_discoder_kill(servers, helpers):
+def test_discover_kill(servers, helpers):
 
     logging.warning('Killing localhost:{}'.format(first))
     servers[first].kill()
