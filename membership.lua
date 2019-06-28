@@ -165,33 +165,54 @@ end
 
 local function send_anti_entropy(uri, msg_type, remote_tbl)
     -- send to `uri` all local members that are not in `remote_tbl`
+    -- well, not all actualy, but all that fits into UDP packet
     checks('string', 'string', 'table')
     local host, port = resolve(uri)
     if not host then
         return false
     end
 
-    local msg_data = {}
-    local cnt = 0
-    local random_members = random_permutation(members.filter_excluding(nil))
-    for _, uri in ipairs(random_members) do
-        local member = members.get(uri)
-        if events.should_overwrite(member, remote_tbl[uri]) then
-            msg_data[uri] = {
-                status = member.status,
-                incarnation = member.incarnation,
-                payload = member.payload,
-            }
-            cnt = cnt + 1
-        end
+    local members_to_send = {}
+    local msg_raw = {opts.advertise_uri, msg_type, members_to_send, {}}
+    local msg_size = #msgpack.encode(msg_raw)
 
-        if cnt > opts.EVENT_PIGGYBACK_LIMIT then
-            break
+    local random_members = random_permutation(members.filter_excluding(nil))
+    for _, member_uri in ipairs(random_members) do
+        local member = members.get(member_uri)
+
+        if events.should_overwrite(member, remote_tbl[member_uri]) then
+            local member_size = members.estimate_msgpacked_size(member_uri, member)
+            if #members_to_send+1 == 16 then
+                -- msgpack:
+                -- `fixarray` stores an array whose length is upto 15 elements
+                -- `array 16` stores an array whose length is upto (2^16)-1 elements
+                -- it's 2 bytes larger
+                member_size = member_size + 2
+            end
+            local enc_size = opts.encrypted_size(msg_size + member_size)
+            if enc_size > opts.MAX_PACKET_SIZE then
+                break
+            else
+                table.insert(members_to_send, members.pack(member_uri, member))
+                msg_size = msg_size + member_size
+            end
         end
     end
 
-    local msg_msgpacked = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})
+    local msg_msgpacked = msgpack.encode(msg_raw)
+    assert(#msg_msgpacked == msg_size,
+        string.format('msgpack size differs: %s ~= %s', #msg_msgpacked, msg_size)
+    )
+
     local msg_encrypted = opts.encrypt(msg_msgpacked)
+    assert(#msg_encrypted == opts.encrypted_size(msg_size),
+        string.format('encrypted size differs: %s ~= %s', #msg_encrypted, opts.encrypted_size(msg_size))
+    )
+
+    assert(#msg_encrypted <= opts.MAX_PACKET_SIZE,
+        string.format('Packet too big: %s > %s, %d members',
+            #msg_encrypted, opts.MAX_PACKET_SIZE, #members_to_send)
+    )
     local ret = _sock:sendto(host, port, msg_encrypted)
     return ret and ret > 0
 end
@@ -270,14 +291,18 @@ local function handle_message(msg)
             log.error('Message ACK without source uri')
         end
     elseif msg_type == 'SYNC_REQ' or msg_type == 'SYNC_ACK' then
-        local remote_tbl = msg_data
-        for uri, member in pairs(remote_tbl) do
-            if events.should_overwrite(member, members.get(uri)) then
+        local remote_tbl = {}
+        for _, member in ipairs(msg_data) do
+            local member_uri, member = members.unpack(member)
+            remote_tbl[member_uri] = member
+
+            if events.should_overwrite(member, members.get(member_uri)) then
                 events.generate(uri, member.status, member.incarnation, member.payload)
             end
         end
+
         if msg_type == 'SYNC_REQ' then
-            send_anti_entropy(sender_uri, 'SYNC_ACK', msg_data)
+            send_anti_entropy(sender_uri, 'SYNC_ACK', remote_tbl)
         else
             _sync_trigger:broadcast()
         end

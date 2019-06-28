@@ -16,8 +16,6 @@ options.ANTI_ENTROPY_PERIOD_SECONDS = 10.0
 options.SUSPECT_TIMEOUT_SECONDS = 3
 options.NUM_FAILURE_DETECTION_SUBGROUPS = 3 -- denoted as k in SWIM paper
 
-options.EVENT_PIGGYBACK_LIMIT = 10
-
 -- 1472 = Default-MTU (1500) - IP-Header (20) - UDP-Header (8)
 options.MAX_PACKET_SIZE = 1472
 

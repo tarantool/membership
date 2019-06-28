@@ -1,5 +1,6 @@
 local fiber = require('fiber')
 local checks = require('checks')
+local msgpack = require('msgpack')
 
 local opts = require('membership.options')
 
@@ -29,6 +30,34 @@ end
 
 function members.get(uri)
     return _all_members[uri]
+end
+
+function members.estimate_msgpacked_size(uri, member)
+    local sum = 0
+    sum = sum + #msgpack.encode(uri)
+    sum = sum + #msgpack.encode(member.status)
+    sum = sum + #msgpack.encode(member.incarnation)
+    sum = sum + #msgpack.encode(member.payload or msgpack.NULL)
+    return sum + 1
+end
+
+function members.pack(uri, member)
+    checks('string', 'table')
+    return {
+        uri,
+        member.status,
+        member.incarnation,
+        member.payload or msgpack.NULL,
+    }
+end
+
+function members.unpack(member)
+    checks('table')
+    return member[1], {
+        status = member[2],
+        incarnation = member[3],
+        payload = (member[4] ~= msgpack.NULL) and member[4] or nil,
+    }
 end
 
 function members.filter_excluding(state, uri1, uri2)

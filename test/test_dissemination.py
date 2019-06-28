@@ -34,13 +34,15 @@ def test_discover_join(servers, helpers):
             if alive_cnt == len(servers_list):
                 del servers_copy[port]
 
-        logging.info('{}/{} ready so far'.format(
+        tx = time.time()
+        logging.info('{}/{} ready so far, t={:.3f}'.format(
             len(servers_list)-len(servers_copy),
-            len(servers_list)
+            len(servers_list),
+            tx-t2
         ))
         assert not servers_copy
 
-    helpers.wait_for(check_fullmesh, timeout=1500)
+    helpers.wait_for(check_fullmesh, timeout=20)
 
     t3 = time.time()
     logging.warn('Full mesh in {:.3f}s'.format(t3-t2))
