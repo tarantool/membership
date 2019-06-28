@@ -138,6 +138,33 @@ local function send_message(uri, msg_type, msg_data)
         end
     end
 
+    local random_members = random_permutation(members.filter_excluding(nil))
+    for _, member_uri in ipairs(random_members) do
+        if not events_to_send[member_uri] then
+            local member = members.get(member_uri)
+            local event = {
+                uri = member_uri,
+                status = member.status,
+                incarnation = member.incarnation,
+                payload = member.payload,
+                ttl = 1,
+            }
+
+            local evt_size = events.estimate_msgpacked_size(event)
+            if #events_to_send+1 == 16 then
+                evt_size = evt_size + 2
+            end
+            local enc_size = opts.encrypted_size(msg_size + evt_size)
+            if enc_size > opts.MAX_PACKET_SIZE then
+                break
+            else
+                table.insert(events_to_send, events.pack(event))
+                events_to_send[event.uri] = true
+                msg_size = msg_size + evt_size
+            end
+        end
+    end
+
     for k, _ in pairs(events_to_send) do
         if type(k) == 'string' then
             events_to_send[k] = nil
