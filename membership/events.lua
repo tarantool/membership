@@ -1,5 +1,6 @@
 local log = require('log')
 local fiber = require('fiber')
+local checks = require('checks')
 local msgpack = require('msgpack')
 
 local opts = require('membership.options')
@@ -60,8 +61,8 @@ end
 function events.gc()
     for uri, _ in pairs(_expired) do
         _all_events[uri] = nil
+        _expired[uri] = nil
     end
-    _expired = {}
 end
 
 function events.unpack(event)
