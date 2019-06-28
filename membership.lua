@@ -57,6 +57,17 @@ local function nslookup(host, port)
     return nil
 end
 
+local function random_permutation(tbl)
+    local cnt = #tbl
+    for src = 1, cnt-1 do
+        local dst = math.random(src, cnt)
+        local x = tbl[dst]
+        tbl[dst] = tbl[src]
+        tbl[src] = x
+    end
+    return tbl
+end
+
 --
 -- SEND FUNCTIONS
 --
@@ -162,7 +173,9 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
 
     local msg_data = {}
     local cnt = 0
-    for uri, member in members.pairs() do
+    local random_members = random_permutation(members.filter_excluding(nil))
+    for _, uri in ipairs(random_members) do
+        local member = members.get(uri)
         if events.should_overwrite(member, remote_tbl[uri]) then
             msg_data[uri] = {
                 status = member.status,
@@ -171,20 +184,15 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
             }
             cnt = cnt + 1
         end
-    end
 
-    while cnt > opts.EVENT_PIGGYBACK_LIMIT do
-        local uri = nil
-        for _ = 1, math.random(cnt) do
-            uri = next(msg_data, uri)
+        if cnt > opts.EVENT_PIGGYBACK_LIMIT then
+            break
         end
-        msg_data[uri] = nil
-        cnt = cnt - 1
     end
 
-    local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})
-    local msg = opts.encrypt(msg)
-    local ret = _sock:sendto(host, port, msg)
+    local msg_msgpacked = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})
+    local msg_encrypted = opts.encrypt(msg_msgpacked)
+    local ret = _sock:sendto(host, port, msg_encrypted)
     return ret and ret > 0
 end
 
@@ -340,6 +348,8 @@ local function wait_ack(uri, ts, timeout)
     return false
 end
 
+local _protocol_round_list = {}
+local _protocol_round_iter = 1
 local function protocol_step()
     local loop_now = fiber.time64()
 
@@ -347,9 +357,7 @@ local function protocol_step()
     local expiry = loop_now - opts.SUSPECT_TIMEOUT_SECONDS * 1.0e6
     for uri, member in members.pairs() do
         if member.status == opts.SUSPECT and member.timestamp < expiry then
-            log.info('Node timed out: %s - %s',
-                uri, string.upper(opts.STATUS_NAMES[opts.DEAD])
-            )
+            log.info('Node timed out: %s - %s', uri, opts.STATUS_NAMES[opts.DEAD])
             events.generate(uri, opts.DEAD)
         end
     end
@@ -358,7 +366,15 @@ local function protocol_step()
     _ack_cache = {}
 
     -- prepare to send ping
-    local uri = members.next_shuffled_uri()
+    _protocol_round_iter = _protocol_round_iter + 1
+
+    if _protocol_round_list[_protocol_round_iter] == nil then
+        _protocol_round_iter = 1
+        _protocol_round_list = members.filter_excluding('left')
+        random_permutation(_protocol_round_list)
+    end
+
+    local uri = _protocol_round_list[_protocol_round_iter]
     if uri == nil then
         return
     end
@@ -381,13 +397,21 @@ local function protocol_step()
         return
     end
 
-    -- try indirect ping
-    local through_uri_list = members.random_alive_uri_list(opts.NUM_FAILURE_DETECTION_SUBGROUPS, uri)
+    local sent_indirect = 0
+    local through_uri_list = random_permutation(
+        members.filter_excluding('alive', opts.advertise_uri, uri)
+    )
     for _, through_uri in ipairs(through_uri_list) do
-        send_message(through_uri, 'PING', msg_data)
+        if send_message(through_uri, 'PING', msg_data) then
+            sent_indirect = sent_indirect + 1
+        end
+
+        if sent_indirect >= opts.NUM_FAILURE_DETECTION_SUBGROUPS then
+            break
+        end
     end
 
-    if wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6) then
+    if sent_indirect > 0 and wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6) then
         local member = members.get(uri)
         members.set(uri, member.status, member.incarnation)
         return
@@ -434,11 +458,13 @@ local function wait_sync(uri, timeout)
 end
 
 local function anti_entropy_step()
-    local uri = members.random_alive_uri_list(1)[1]
-    if uri == nil then
+    local alive_members = members.filter_excluding('unhealthy', opts.advertise_uri)
+    local alive_cnt = #alive_members
+    if alive_cnt == 0 then
         return false
     end
 
+    local uri = alive_members[math.random(alive_cnt)]
     send_anti_entropy(uri, 'SYNC_REQ', {})
     return _sync_trigger:wait(opts.PROTOCOL_PERIOD_SECONDS)
 end
@@ -533,7 +559,7 @@ local function leave()
         ttl = members.count(),
     })
     local msg = msgpack.encode({opts.advertise_uri, 'LEAVE', msgpack.NULL, {event}})
-    for _, uri in ipairs(members.random_alive_uri_list(members.count())) do
+    for _, uri in ipairs(members.filter_excluding('unhealthy', opts.advertise_uri)) do
         local host, port = resolve(uri)
         sock:sendto(host, port, msg)
     end
@@ -541,6 +567,7 @@ local function leave()
     sock:close()
     members.clear()
     events.clear()
+    table.clear(_protocol_round_list)
     return true
 end
 

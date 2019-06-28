@@ -15,13 +15,8 @@ local _all_members = {
     -- uri is a string in format '<host>:<port>'
 }
 
-local _shuffled_uri_list = {}
-local _shuffled_idx = 1
-
 function members.clear()
-    _all_members = {}
-    _shuffled_uri_list = {}
-    _shuffled_idx = 1
+    table.clear(_all_members)
 end
 
 function members.pairs()
@@ -33,48 +28,22 @@ function members.myself()
 end
 
 function members.get(uri)
-    checks('string')
     return _all_members[uri]
 end
 
-function members.random_alive_uri_list(n, excluding)
-    checks('number', '?string')
+function members.filter_excluding(state, uri1, uri2)
     local ret = {}
-
     for uri, member in pairs(_all_members) do
-        if member.status ~= opts.ALIVE then
-            -- skip
-        elseif uri == opts.advertise_uri then
-            -- skip
-        elseif uri == excluding then
-            --skip
-        else
+        if (uri ~= uri1) and (uri ~= uri2)
+        and (
+            (state == nil)
+            or (state == 'unhealthy' and member.status == opts.ALIVE)
+            or (state == 'left' and member.status ~= opts.LEFT)
+        ) then
             table.insert(ret, uri)
         end
     end
-
-    while #ret > n do
-        table.remove(ret, math.random(#ret))
-    end
-
     return ret
-end
-
-function members.next_shuffled_uri()
-    if _shuffled_idx > #_shuffled_uri_list then
-        _shuffled_uri_list = {}
-        _shuffled_idx = 1
-        for uri, member in pairs(_all_members) do
-            if member.status == opts.LEFT then
-                -- skip
-            else
-                table.insert(_shuffled_uri_list, math.random(#_shuffled_uri_list+1), uri)
-            end
-        end
-    end
-
-    _shuffled_idx = _shuffled_idx + 1
-    return _shuffled_uri_list[_shuffled_idx-1]
 end
 
 function members.set(uri, status, incarnation, payload)
