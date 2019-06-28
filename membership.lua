@@ -69,43 +69,86 @@ local function send_message(uri, msg_type, msg_data)
     end
 
     local events_to_send = {}
+    local msg_raw = {opts.advertise_uri, msg_type, msg_data, events_to_send}
+    local msg_size = #msgpack.encode(msg_raw)
 
     if members.get(uri) then
-        local extra_event = events.get(uri) or {
-            uri = uri,
-            status = members.get(uri).status,
-            incarnation = members.get(uri).incarnation,
-            ttl = 1,
-        }
-        table.insert(events_to_send, events.pack(extra_event))
-    end
-
-    local extra_event = events.get(opts.advertise_uri) or {
-        uri = opts.advertise_uri,
-        status = opts.ALIVE,
-        incarnation = members.myself().incarnation,
-        payload = members.myself().payload,
-        ttl = 1,
-    }
-    table.insert(events_to_send, events.pack(extra_event))
-
-    for _, event in events.pairs() do
-        if #events_to_send > opts.EVENT_PIGGYBACK_LIMIT then
-            break
+        local extra_event = events.get(uri)
+        if extra_event == nil then
+            local member = members.get(uri)
+            extra_event = {
+                uri = uri,
+                status = member.status,
+                incarnation = member.incarnation,
+                ttl = 1,
+            }
         end
 
-        if event.uri == uri or event.uri == opts.advertise_uri then
-            -- already packed
-        else
-            table.insert(events_to_send, events.pack(event))
+        -- Save some packet space:
+        -- Don't send to a member his own payload
+        extra_event.payload = nil
+
+        table.insert(events_to_send, events.pack(extra_event))
+        msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
+        events_to_send[uri] = true
+    end
+
+    local extra_event = events.get(opts.advertise_uri)
+    if extra_event == nil and not events_to_send[opts.advertise_uri] then
+        local myself = members.myself()
+        extra_event = {
+            uri = opts.advertise_uri,
+            status = opts.ALIVE,
+            incarnation = myself.incarnation,
+            payload = myself.payload,
+            ttl = 1,
+        }
+    end
+    if extra_event ~= nil then
+        table.insert(events_to_send, events.pack(extra_event))
+        msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
+        events_to_send[opts.advertise_uri] = true
+    end
+
+    for _, event in events.pairs() do
+        if not events_to_send[uri] then
+            local evt_size = events.estimate_msgpacked_size(event)
+            if #events_to_send+1 == 16 then
+                evt_size = evt_size + 2
+            end
+            local enc_size = opts.encrypted_size(msg_size + evt_size)
+            if enc_size > opts.MAX_PACKET_SIZE then
+                break
+            else
+                table.insert(events_to_send, events.pack(event))
+                events_to_send[event.uri] = true
+                msg_size = msg_size + evt_size
+            end
+        end
+    end
+
+    for k, _ in pairs(events_to_send) do
+        if type(k) == 'string' then
+            events_to_send[k] = nil
         end
     end
 
     events.gc()
 
-    local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, events_to_send})
-    local msg = opts.encrypt(msg)
-    local ret = _sock:sendto(host, port, msg)
+    local msg_msgpacked = msgpack.encode(msg_raw)
+    assert(#msg_msgpacked == msg_size,
+        string.format('msgpack size differs: %s ~= %s', #msg_msgpacked, msg_size)
+    )
+
+    local msg_encrypted = opts.encrypt(msg_msgpacked)
+    assert(#msg_encrypted == opts.encrypted_size(msg_size),
+        string.format('encrypted size differs: %s ~= %s', #msg_encrypted, opts.encrypted_size(msg_size))
+    )
+
+    assert(#msg_encrypted <= opts.MAX_PACKET_SIZE,
+        string.format('Packet too big: %s > %s, %d events', #msg_encrypted, opts.MAX_PACKET_SIZE, #events_to_send)
+    )
+    local ret = _sock:sendto(host, port, msg_encrypted)
     return ret and ret > 0
 end
 
@@ -176,7 +219,7 @@ local function handle_message(msg)
 
             if event.status ~= opts.ALIVE and event.incarnation >= myself.incarnation then
                 -- someone thinks that we are dead
-                log.info('Refuting the rumor that we are dead')
+                log.info('Refuting the rumor that we are %s', opts.STATUS_NAMES[event.status])
                 event.incarnation = event.incarnation + 1
                 event.status = opts.ALIVE
                 event.payload = myself.payload
@@ -258,6 +301,9 @@ local function handle_message_step()
             member = members.get(uri)
         end
         if member and member.status == opts.DEAD then
+            log.info('Broken UDP packet from %s - %s',
+                uri, opts.STATUS_NAMES[opts.NONDECRYPTABLE]
+            )
             events.generate(uri, opts.NONDECRYPTABLE)
         end
     end
@@ -301,6 +347,9 @@ local function protocol_step()
     local expiry = loop_now - opts.SUSPECT_TIMEOUT_SECONDS * 1.0e6
     for uri, member in members.pairs() do
         if member.status == opts.SUSPECT and member.timestamp < expiry then
+            log.info('Node timed out: %s - %s',
+                uri, string.upper(opts.STATUS_NAMES[opts.DEAD])
+            )
             events.generate(uri, opts.DEAD)
         end
     end
@@ -324,7 +373,7 @@ local function protocol_step()
     local ok = send_message(uri, 'PING', msg_data)
     if ok and wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6) then
         local member = members.get(uri)
-        members.set(uri, member.status, member.incarnation)
+        members.set(uri, member.status, member.incarnation) -- update timstamp
         return
     end
     if members.get(uri).status >= opts.DEAD then
@@ -343,7 +392,7 @@ local function protocol_step()
         members.set(uri, member.status, member.incarnation)
         return
     elseif members.get(uri).status == opts.ALIVE then
-        log.info('Could not reach node: %s', uri)
+        log.info('Could not reach node: %s - %s', uri, opts.STATUS_NAMES[opts.SUSPECT])
         events.generate(uri, opts.SUSPECT)
         return
     end

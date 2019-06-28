@@ -45,6 +45,14 @@ function options.set_encryption_key(key)
     end
 end
 
+function options.encrypted_size(len)
+    if not options.encryption_key then
+        return len
+    else
+        return math.ceil((len+1)/16)*16
+    end
+end
+
 function options.encrypt(msg)
     if not options.encryption_key then
         return msg, nil

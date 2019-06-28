@@ -42,6 +42,16 @@ function events.pairs()
     return pairs(_all_events)
 end
 
+function events.estimate_msgpacked_size(event)
+    local sum = 0
+    sum = sum + #msgpack.encode(event.uri)
+    sum = sum + #msgpack.encode(event.status)
+    sum = sum + #msgpack.encode(event.incarnation)
+    sum = sum + #msgpack.encode(event.payload or msgpack.NULL)
+    sum = sum + #msgpack.encode(event.ttl)
+    return sum + 1
+end
+
 function events.pack(event)
     checks('table')
     event.ttl = event.ttl - 1
