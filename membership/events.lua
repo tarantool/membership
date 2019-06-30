@@ -107,7 +107,7 @@ function events.generate(uri, status, incarnation, payload)
             or (members.get(uri) or {}).incarnation
             or 1,
         payload = payload,
-        ttl = members.count(),
+        ttl = math.floor(math.log(members.count(), 2)) + 2,
     })
 end
 

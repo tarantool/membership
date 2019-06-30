@@ -55,14 +55,22 @@ def test_discover_kill(servers, helpers):
 
     servers_copy = {**servers}
     uri = 'localhost:{}'.format(first)
+
+    t1 = time.time()
     def check_public_opinion():
         """ Cheack that all members consider URI has given STATUS """
 
         for port, srv in list(servers_copy.items()):
             member = srv.get_member(uri)
-            if member != None and member['status'] == 'dead':
+            if member != None and member['status'] != 'alive':
                 del servers_copy[port]
 
+        tx = time.time()
+        logging.info('{}/{} aware so far, t={:.3f}'.format(
+            len(servers_list)-len(servers_copy),
+            len(servers_list),
+            tx-t1
+        ))
         assert not servers_copy
 
     helpers.wait_for(check_public_opinion, timeout=5)
