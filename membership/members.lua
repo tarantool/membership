@@ -1,5 +1,6 @@
 local fiber = require('fiber')
 local checks = require('checks')
+local msgpack = require('msgpack')
 
 local opts = require('membership.options')
 
@@ -15,13 +16,8 @@ local _all_members = {
     -- uri is a string in format '<host>:<port>'
 }
 
-local _shuffled_uri_list = {}
-local _shuffled_idx = 1
-
 function members.clear()
-    _all_members = {}
-    _shuffled_uri_list = {}
-    _shuffled_idx = 1
+    table.clear(_all_members)
 end
 
 function members.pairs()
@@ -33,48 +29,51 @@ function members.myself()
 end
 
 function members.get(uri)
-    checks('string')
     return _all_members[uri]
 end
 
-function members.random_alive_uri_list(n, excluding)
-    checks('number', '?string')
-    local ret = {}
+function members.estimate_msgpacked_size(uri, member)
+    local sum = 0
+    sum = sum + #msgpack.encode(uri)
+    sum = sum + #msgpack.encode(member.status)
+    sum = sum + #msgpack.encode(member.incarnation)
+    sum = sum + #msgpack.encode(member.payload or msgpack.NULL)
+    return sum + 1
+end
 
+function members.pack(uri, member)
+    checks('string', 'table')
+    return {
+        uri,
+        member.status,
+        member.incarnation,
+        member.payload or msgpack.NULL,
+    }
+end
+
+function members.unpack(member)
+    checks('table')
+    return member[1], {
+        status = member[2],
+        incarnation = member[3],
+        payload = (member[4] ~= msgpack.NULL) and member[4] or nil,
+    }
+end
+
+function members.filter_excluding(state, uri1, uri2)
+    assert(state == nil or state == 'left' or state == 'unhealthy')
+    local ret = {}
     for uri, member in pairs(_all_members) do
-        if member.status ~= opts.ALIVE then
-            -- skip
-        elseif uri == opts.advertise_uri then
-            -- skip
-        elseif uri == excluding then
-            --skip
-        else
+        if (uri ~= uri1) and (uri ~= uri2)
+        and (
+            (state == nil)
+            or (state == 'unhealthy' and member.status == opts.ALIVE)
+            or (state == 'left' and member.status ~= opts.LEFT)
+        ) then
             table.insert(ret, uri)
         end
     end
-
-    while #ret > n do
-        table.remove(ret, math.random(#ret))
-    end
-
     return ret
-end
-
-function members.next_shuffled_uri()
-    if _shuffled_idx > #_shuffled_uri_list then
-        _shuffled_uri_list = {}
-        _shuffled_idx = 1
-        for uri, member in pairs(_all_members) do
-            if member.status == opts.LEFT then
-                -- skip
-            else
-                table.insert(_shuffled_uri_list, math.random(#_shuffled_uri_list+1), uri)
-            end
-        end
-    end
-
-    _shuffled_idx = _shuffled_idx + 1
-    return _shuffled_uri_list[_shuffled_idx-1]
 end
 
 function members.set(uri, status, incarnation, payload)

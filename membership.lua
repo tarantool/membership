@@ -57,6 +57,17 @@ local function nslookup(host, port)
     return nil
 end
 
+local function random_permutation(tbl)
+    local cnt = #tbl
+    for src = 1, cnt-1 do
+        local dst = math.random(src, cnt)
+        local x = tbl[dst]
+        tbl[dst] = tbl[src]
+        tbl[src] = x
+    end
+    return tbl
+end
+
 --
 -- SEND FUNCTIONS
 --
@@ -69,68 +80,144 @@ local function send_message(uri, msg_type, msg_data)
     end
 
     local events_to_send = {}
+    local msg_raw = {opts.advertise_uri, msg_type, msg_data, events_to_send}
+    local msg_size = #msgpack.encode(msg_raw)
 
     if members.get(uri) then
-        local extra_event = events.get(uri) or {
-            uri = uri,
-            status = members.get(uri).status,
-            incarnation = members.get(uri).incarnation,
-            ttl = 1,
-        }
-        table.insert(events_to_send, events.pack(extra_event))
-    end
-
-    local extra_event = events.get(opts.advertise_uri) or {
-        uri = opts.advertise_uri,
-        status = opts.ALIVE,
-        incarnation = members.myself().incarnation,
-        payload = members.myself().payload,
-        ttl = 1,
-    }
-    table.insert(events_to_send, events.pack(extra_event))
-
-    for _, event in events.pairs() do
-        if #events_to_send > opts.EVENT_PIGGYBACK_LIMIT then
-            break
+        local extra_event = events.get(uri)
+        if extra_event == nil then
+            local member = members.get(uri)
+            extra_event = {
+                uri = uri,
+                status = member.status,
+                incarnation = member.incarnation,
+                ttl = 1,
+            }
         end
 
-        if event.uri == uri or event.uri == opts.advertise_uri then
-            -- already packed
-        else
-            table.insert(events_to_send, events.pack(event))
+        -- Save some packet space:
+        -- Don't send to a member his own payload
+        extra_event.payload = nil
+
+        table.insert(events_to_send, events.pack(extra_event))
+        msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
+        events_to_send[uri] = true
+    end
+
+    local extra_event = events.get(opts.advertise_uri)
+    if extra_event == nil and not events_to_send[opts.advertise_uri] then
+        local myself = members.myself()
+        extra_event = {
+            uri = opts.advertise_uri,
+            status = opts.ALIVE,
+            incarnation = myself.incarnation,
+            payload = myself.payload,
+            ttl = 1,
+        }
+    end
+    if extra_event ~= nil then
+        table.insert(events_to_send, events.pack(extra_event))
+        msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
+        events_to_send[opts.advertise_uri] = true
+    end
+
+    for _, event in events.pairs() do
+        if not events_to_send[uri] then
+            local evt_size = events.estimate_msgpacked_size(event)
+            if #events_to_send+1 == 16 then
+                evt_size = evt_size + 2
+            end
+            local enc_size = opts.encrypted_size(msg_size + evt_size)
+            if enc_size > opts.MAX_PACKET_SIZE then
+                break
+            else
+                table.insert(events_to_send, events.pack(event))
+                events_to_send[event.uri] = true
+                msg_size = msg_size + evt_size
+            end
+        end
+    end
+
+    local random_members = random_permutation(members.filter_excluding(nil))
+    for _, member_uri in ipairs(random_members) do
+        if not events_to_send[member_uri] then
+            local member = members.get(member_uri)
+            local event = {
+                uri = member_uri,
+                status = member.status,
+                incarnation = member.incarnation,
+                payload = member.payload,
+                ttl = 1,
+            }
+
+            local evt_size = events.estimate_msgpacked_size(event)
+            if #events_to_send+1 == 16 then
+                evt_size = evt_size + 2
+            end
+            local enc_size = opts.encrypted_size(msg_size + evt_size)
+            if enc_size > opts.MAX_PACKET_SIZE then
+                break
+            else
+                table.insert(events_to_send, events.pack(event))
+                events_to_send[event.uri] = true
+                msg_size = msg_size + evt_size
+            end
+        end
+    end
+
+    for k, _ in pairs(events_to_send) do
+        if type(k) == 'string' then
+            events_to_send[k] = nil
         end
     end
 
     events.gc()
 
-    local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, events_to_send})
-    local msg = opts.encrypt(msg)
-    local ret = _sock:sendto(host, port, msg)
+    local msg_msgpacked = msgpack.encode(msg_raw)
+    local msg_encrypted = opts.encrypt(msg_msgpacked)
+    local ret = _sock:sendto(host, port, msg_encrypted)
     return ret and ret > 0
 end
 
 local function send_anti_entropy(uri, msg_type, remote_tbl)
     -- send to `uri` all local members that are not in `remote_tbl`
+    -- well, not all actualy, but all that fits into UDP packet
     checks('string', 'string', 'table')
     local host, port = resolve(uri)
     if not host then
         return false
     end
 
-    local msg_data = {}
-    for uri, member in members.pairs() do
-        if events.should_overwrite(member, remote_tbl[uri]) then
-            msg_data[uri] = {
-                status = member.status,
-                incarnation = member.incarnation,
-                payload = member.payload,
-            }
+    local members_to_send = {}
+    local msg_raw = {opts.advertise_uri, msg_type, members_to_send, {}}
+    local msg_size = #msgpack.encode(msg_raw)
+
+    local random_members = random_permutation(members.filter_excluding(nil))
+    for _, member_uri in ipairs(random_members) do
+        local member = members.get(member_uri)
+
+        if events.should_overwrite(member, remote_tbl[member_uri]) then
+            local member_size = members.estimate_msgpacked_size(member_uri, member)
+            if #members_to_send+1 == 16 then
+                -- msgpack:
+                -- `fixarray` stores an array whose length is upto 15 elements
+                -- `array 16` stores an array whose length is upto (2^16)-1 elements
+                -- it's 2 bytes larger
+                member_size = member_size + 2
+            end
+            local enc_size = opts.encrypted_size(msg_size + member_size)
+            if enc_size > opts.MAX_PACKET_SIZE then
+                break
+            else
+                table.insert(members_to_send, members.pack(member_uri, member))
+                msg_size = msg_size + member_size
+            end
         end
     end
 
-    local msg = msgpack.encode({opts.advertise_uri, msg_type, msg_data, {}})
-    local msg = opts.encrypt(msg)
-    local ret = _sock:sendto(host, port, msg)
+    local msg_msgpacked = msgpack.encode(msg_raw)
+    local msg_encrypted = opts.encrypt(msg_msgpacked)
+    local ret = _sock:sendto(host, port, msg_encrypted)
     return ret and ret > 0
 end
 
@@ -165,7 +252,7 @@ local function handle_message(msg)
 
             if event.status ~= opts.ALIVE and event.incarnation >= myself.incarnation then
                 -- someone thinks that we are dead
-                log.info('Refuting the rumor that we are dead')
+                log.info('Refuting the rumor that we are %s', opts.STATUS_NAMES[event.status])
                 event.incarnation = event.incarnation + 1
                 event.status = opts.ALIVE
                 event.payload = myself.payload
@@ -208,14 +295,18 @@ local function handle_message(msg)
             log.error('Message ACK without source uri')
         end
     elseif msg_type == 'SYNC_REQ' or msg_type == 'SYNC_ACK' then
-        local remote_tbl = msg_data
-        for uri, member in pairs(remote_tbl) do
-            if events.should_overwrite(member, members.get(uri)) then
-                events.generate(uri, member.status, member.incarnation, member.payload)
+        local remote_tbl = {}
+        for _, member in ipairs(msg_data) do
+            local member_uri, member = members.unpack(member)
+            remote_tbl[member_uri] = member
+
+            if events.should_overwrite(member, members.get(member_uri)) then
+                events.generate(member_uri, member.status, member.incarnation, member.payload)
             end
         end
+
         if msg_type == 'SYNC_REQ' then
-            send_anti_entropy(sender_uri, 'SYNC_ACK', msg_data)
+            send_anti_entropy(sender_uri, 'SYNC_ACK', remote_tbl)
         else
             _sync_trigger:broadcast()
         end
@@ -237,8 +328,7 @@ local function handle_message_step()
         return
     end
 
-    -- 1472 = Default-MTU (1500) - IP-Header (20) - UDP-Header (8)
-    local msg, from = _sock:recvfrom(1472)
+    local msg, from = _sock:recvfrom(opts.MAX_PACKET_SIZE)
     local ok = handle_message(msg)
 
     if not ok and type(from) == 'table' then
@@ -248,6 +338,9 @@ local function handle_message_step()
             member = members.get(uri)
         end
         if member and member.status == opts.DEAD then
+            log.info('Broken UDP packet from %s - %s',
+                uri, opts.STATUS_NAMES[opts.NONDECRYPTABLE]
+            )
             events.generate(uri, opts.NONDECRYPTABLE)
         end
     end
@@ -284,6 +377,8 @@ local function wait_ack(uri, ts, timeout)
     return false
 end
 
+local _protocol_round_list = {}
+local _protocol_round_iter = 1
 local function protocol_step()
     local loop_now = fiber.time64()
 
@@ -291,6 +386,7 @@ local function protocol_step()
     local expiry = loop_now - opts.SUSPECT_TIMEOUT_SECONDS * 1.0e6
     for uri, member in members.pairs() do
         if member.status == opts.SUSPECT and member.timestamp < expiry then
+            log.info('Node timed out: %s - %s', uri, opts.STATUS_NAMES[opts.DEAD])
             events.generate(uri, opts.DEAD)
         end
     end
@@ -299,7 +395,15 @@ local function protocol_step()
     _ack_cache = {}
 
     -- prepare to send ping
-    local uri = members.next_shuffled_uri()
+    _protocol_round_iter = _protocol_round_iter + 1
+
+    if _protocol_round_list[_protocol_round_iter] == nil then
+        _protocol_round_iter = 1
+        _protocol_round_list = members.filter_excluding('left')
+        random_permutation(_protocol_round_list)
+    end
+
+    local uri = _protocol_round_list[_protocol_round_iter]
     if uri == nil then
         return
     end
@@ -314,7 +418,7 @@ local function protocol_step()
     local ok = send_message(uri, 'PING', msg_data)
     if ok and wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6) then
         local member = members.get(uri)
-        members.set(uri, member.status, member.incarnation)
+        members.set(uri, member.status, member.incarnation) -- update timstamp
         return
     end
     if members.get(uri).status >= opts.DEAD then
@@ -322,18 +426,26 @@ local function protocol_step()
         return
     end
 
-    -- try indirect ping
-    local through_uri_list = members.random_alive_uri_list(opts.NUM_FAILURE_DETECTION_SUBGROUPS, uri)
+    local sent_indirect = 0
+    local through_uri_list = random_permutation(
+        members.filter_excluding('unhealthy', opts.advertise_uri, uri)
+    )
     for _, through_uri in ipairs(through_uri_list) do
-        send_message(through_uri, 'PING', msg_data)
+        if send_message(through_uri, 'PING', msg_data) then
+            sent_indirect = sent_indirect + 1
+        end
+
+        if sent_indirect >= opts.NUM_FAILURE_DETECTION_SUBGROUPS then
+            break
+        end
     end
 
-    if wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6) then
+    if sent_indirect > 0 and wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6) then
         local member = members.get(uri)
         members.set(uri, member.status, member.incarnation)
         return
     elseif members.get(uri).status == opts.ALIVE then
-        log.info('Could not reach node: %s', uri)
+        log.info('Could not reach node: %s - %s', uri, opts.STATUS_NAMES[opts.SUSPECT])
         events.generate(uri, opts.SUSPECT)
         return
     end
@@ -375,11 +487,13 @@ local function wait_sync(uri, timeout)
 end
 
 local function anti_entropy_step()
-    local uri = members.random_alive_uri_list(1)[1]
-    if uri == nil then
+    local alive_members = members.filter_excluding('unhealthy', opts.advertise_uri)
+    local alive_cnt = #alive_members
+    if alive_cnt == 0 then
         return false
     end
 
+    local uri = alive_members[math.random(alive_cnt)]
     send_anti_entropy(uri, 'SYNC_REQ', {})
     return _sync_trigger:wait(opts.PROTOCOL_PERIOD_SECONDS)
 end
@@ -474,7 +588,7 @@ local function leave()
         ttl = members.count(),
     })
     local msg = msgpack.encode({opts.advertise_uri, 'LEAVE', msgpack.NULL, {event}})
-    for _, uri in ipairs(members.random_alive_uri_list(members.count())) do
+    for _, uri in ipairs(members.filter_excluding('unhealthy', opts.advertise_uri)) do
         local host, port = resolve(uri)
         sock:sendto(host, port, msg)
     end
@@ -482,6 +596,7 @@ local function leave()
     sock:close()
     members.clear()
     events.clear()
+    table.clear(_protocol_round_list)
     return true
 end
 

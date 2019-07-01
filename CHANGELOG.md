@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fairly calculate size of UDP packets
+- Speed up events dissemination by fully utilizing
+  PING and ACK packets
+- Restrict packet size for anti-entropy sync.
+  Due to the lack of restriction it used to fail
+  which plagued members detection
+
+### Minor
+
+- Make tests lighter by using `console` connection instead of `net.box`
+
 ## [2.1.1] - 2019-01-09
 
 ### Fixed

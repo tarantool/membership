@@ -1,5 +1,6 @@
 local log = require('log')
 local fiber = require('fiber')
+local checks = require('checks')
 local msgpack = require('msgpack')
 
 local opts = require('membership.options')
@@ -41,6 +42,16 @@ function events.pairs()
     return pairs(_all_events)
 end
 
+function events.estimate_msgpacked_size(event)
+    local sum = 0
+    sum = sum + #msgpack.encode(event.uri)
+    sum = sum + #msgpack.encode(event.status)
+    sum = sum + #msgpack.encode(event.incarnation)
+    sum = sum + #msgpack.encode(event.payload or msgpack.NULL)
+    sum = sum + #msgpack.encode(event.ttl)
+    return sum + 1
+end
+
 function events.pack(event)
     checks('table')
     event.ttl = event.ttl - 1
@@ -60,8 +71,8 @@ end
 function events.gc()
     for uri, _ in pairs(_expired) do
         _all_events[uri] = nil
+        _expired[uri] = nil
     end
-    _expired = {}
 end
 
 function events.unpack(event)
@@ -96,7 +107,7 @@ function events.generate(uri, status, incarnation, payload)
             or (members.get(uri) or {}).incarnation
             or 1,
         payload = payload,
-        ttl = members.count(),
+        ttl = math.floor(math.log(members.count(), 2)) + 2,
     })
 end
 
@@ -112,9 +123,9 @@ function events.handle(event)
 
     -- update members list
     if not member then
-        log.info('Adding: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
+        log.debug('Adding: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
     elseif member.status ~= event.status or member.incarnation ~= event.incarnation then
-        log.info('Rumor: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
+        log.debug('Rumor: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
     end
     members.set(event.uri, event.status, event.incarnation, event.payload)
 

@@ -16,7 +16,8 @@ options.ANTI_ENTROPY_PERIOD_SECONDS = 10.0
 options.SUSPECT_TIMEOUT_SECONDS = 3
 options.NUM_FAILURE_DETECTION_SUBGROUPS = 3 -- denoted as k in SWIM paper
 
-options.EVENT_PIGGYBACK_LIMIT = 10
+-- 1472 = Default-MTU (1500) - IP-Header (20) - UDP-Header (8)
+options.MAX_PACKET_SIZE = 1472
 
 options.ENCRYPTION_INIT = 'init-key-16-byte' -- !!KEEP string len SYNCED with cryptoapi
 
@@ -39,6 +40,14 @@ function options.set_encryption_key(key)
             rawset(options, 'encryption_key', key:sub(1, 32))
         end
         log.info('Membership encryption enabled')
+    end
+end
+
+function options.encrypted_size(len)
+    if not options.encryption_key then
+        return len
+    else
+        return math.ceil((len+1)/16)*16
     end
 end
 
