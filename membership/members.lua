@@ -61,6 +61,7 @@ function members.unpack(member)
 end
 
 function members.filter_excluding(state, uri1, uri2)
+    assert(state == nil or state == 'left' or state == 'unhealthy')
     local ret = {}
     for uri, member in pairs(_all_members) do
         if (uri ~= uri1) and (uri ~= uri2)

@@ -428,7 +428,7 @@ local function protocol_step()
 
     local sent_indirect = 0
     local through_uri_list = random_permutation(
-        members.filter_excluding('alive', opts.advertise_uri, uri)
+        members.filter_excluding('unhealthy', opts.advertise_uri, uri)
     )
     for _, through_uri in ipairs(through_uri_list) do
         if send_message(through_uri, 'PING', msg_data) then
