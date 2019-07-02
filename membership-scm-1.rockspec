@@ -1,7 +1,8 @@
 package = 'membership'
 version = 'scm-1'
 source  = {
-    url = '/dev/null',
+    url = 'git+ssh://git@gitlab.com:tarantool/membership.git',
+    branch = 'master',
 }
 dependencies = {
     'lua >= 5.1',
@@ -9,14 +10,14 @@ dependencies = {
 }
 
 build = {
-    type = 'none';
+    type = 'none',
     install = {
         lua = {
-            ['membership.init'] = 'membership.lua';
-            ['membership.events'] = 'membership/events.lua';
-            ['membership.members'] = 'membership/members.lua';
-            ['membership.options'] = 'membership/options.lua';
-            ['membership.network'] = 'membership/network.lua';
+            ['membership'] = 'membership.lua',
+            ['membership.events'] = 'membership/events.lua',
+            ['membership.members'] = 'membership/members.lua',
+            ['membership.options'] = 'membership/options.lua',
+            ['membership.network'] = 'membership/network.lua',
         }
     }
 }
