@@ -10,6 +10,11 @@ set(TARANTOOL_FIND_REQUIRED ON)
 find_package(Tarantool)
 include_directories(${TARANTOOL_INCLUDE_DIRS})
 
+file(GLOB_RECURSE LUA_FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/membership.lua"
+  "${CMAKE_CURRENT_SOURCE_DIR}/membership/*.lua"
+)
+
 ## API doc ####################################################################
 ###############################################################################
 
