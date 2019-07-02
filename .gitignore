@@ -1,3 +1,5 @@
 .rocks
 __pycache__
 .cache/
+build.luarocks
+doc

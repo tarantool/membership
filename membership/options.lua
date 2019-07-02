@@ -1,6 +1,13 @@
+#!/usr/bin/env tarantool
+
 local options = {}
 local log = require('log')
 local cbc = require('crypto').cipher.aes256.cbc
+
+--- Tuning options for membership module.
+-- This module should normally never be used
+--
+-- @submodule membership
 
 options.STATUS_NAMES = {'alive', 'suspect', 'dead', 'non-decryptable', 'left'}
 options.ALIVE = 1
@@ -9,14 +16,39 @@ options.DEAD = 3
 options.NONDECRYPTABLE = 4
 options.LEFT = 5
 
-options.PROTOCOL_PERIOD_SECONDS = 1.0 -- denoted as T' in SWIM paper
-options.ACK_TIMEOUT_SECONDS = 0.200 -- ack timeout
+--- Period of sending direct PINGs.
+-- Denoted as `T'` in [SWIM paper](swim-paper.pdf).
+--
+-- Default is 1
+options.PROTOCOL_PERIOD_SECONDS = 1.0
+
+--- Time to wait for ACK message after PING.
+-- If a member does not reply within this time,
+-- the indirect ping algorithm is invoked.
+--
+-- Default is 0.2
+options.ACK_TIMEOUT_SECONDS = 0.200
+
+--- Period to perform anti-entropy sync.
+-- Algorithm is described in [SWIM paper](swim-paper.pdf).
+--
+-- Default is 10
 options.ANTI_ENTROPY_PERIOD_SECONDS = 10.0
 
+--- Timeout to mark `suspect` members as `dead`.
+--
+-- Default is 3
 options.SUSPECT_TIMEOUT_SECONDS = 3
-options.NUM_FAILURE_DETECTION_SUBGROUPS = 3 -- denoted as k in SWIM paper
 
--- 1472 = Default-MTU (1500) - IP-Header (20) - UDP-Header (8)
+--- Number of members to try indirectly pinging a `suspect`.
+-- Denoted as `k` in [SWIM paper](swim-paper.pdf).
+--
+-- Default is 3
+options.NUM_FAILURE_DETECTION_SUBGROUPS = 3
+
+--- Maximum size of UPD packets to send.
+--
+-- Default is 1472 (`Default-MTU (1500) - IP-Header (20) - UDP-Header (8)`)
 options.MAX_PACKET_SIZE = 1472
 
 options.ENCRYPTION_INIT = 'init-key-16-byte' -- !!KEEP string len SYNCED with cryptoapi

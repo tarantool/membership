@@ -1,5 +1,17 @@
 #!/usr/bin/env tarantool
 
+--- Membership library for Tarantool based on a gossip protocol.
+-- This library builds a mesh from multiple tarantool instances. The
+-- mesh monitors itself, helps members discover everyone else and get
+-- notified about their status changes with low latency.
+--
+-- It is built upon the ideas from consul, or, more precisely,
+-- the [SWIM](swim-paper.pdf) algorithm.
+--
+-- Membership module works over UDP protocol and can operate
+-- even before tarantool [`box.cfg`](https://tarantool.io/en/doc/latest/book/box/box_cfg/) was initialized.
+-- @module membership
+
 local log = require('log')
 local uri_tools = require('uri')
 local json = require('json')
@@ -515,9 +527,26 @@ local function anti_entropy_loop()
 end
 
 --
--- BASIC FUNCTIONS
+-- PUBLIC API
 --
 
+--- Initialize the membership module.
+-- Bind a UDP socket to `0.0.0.0:<port>`,
+-- set the `advertise_uri` parameter to `<advertise_host>:<port>`,
+-- and `incarnation` to `1`.
+--
+-- The `init()` function can be called several times,
+-- the old socket will be closed and a new one opened.
+--
+-- If the `advertise_uri` changes during the next `init()`,
+-- the old URI is considered `DEAD`.
+-- In order to leave the group gracefully use the @{leave} function.
+--
+-- @function init
+-- @tparam string advertise_host A hostname or IP address being advertised to other members
+-- @tparam number port A UDP port to bind
+-- @treturn boolean `true`
+-- @raise Socket bind error
 local function init(advertise_host, port)
     checks('string', 'number')
 
@@ -541,6 +570,13 @@ local function init(advertise_host, port)
     return true
 end
 
+
+--- Discover members in local network.
+-- Send UDP broadcast to all networks
+-- discovered by `getifaddrs()` C call
+-- @function broadcast
+-- @return[1] `true` if broadcast was sent
+-- @return[2] `false` if `getifaddrs()` fails.
 local function broadcast(port)
     checks('number')
 
@@ -562,7 +598,7 @@ local function broadcast(port)
         local uri = addr.bcast or addr.inet4
         if uri then
             local uri = string.format('%s:%s', uri, port)
-            send_message(uri, 'PING', msg_data)
+        send_message(uri, 'PING', msg_data)
             log.info('Membership BROADCAST sent to %s', uri)
             bcast_sent = true
         end
@@ -575,6 +611,11 @@ local function broadcast(port)
     return true
 end
 
+--- Gracefully leave the membership group.
+-- The node will be marked with the status `left`
+-- and no other members will ever try to reconnect it.
+-- @function leave
+-- @treturn boolean `true`
 local function leave()
     -- First, we need to stop all fibers
     local sock = _sock
@@ -600,11 +641,45 @@ local function leave()
     return true
 end
 
-function _member_pack(uri, member)
+--- Member data structure.
+-- A member is represented by the table with the following fields:
+--
+-- @table MemberInfo
+-- @tfield string uri `<advertise_uri>` of a member
+--
+-- @tfield string status a string that takes one of the values below
+--
+-- * `alive`: a member that replies to ping-messages is alive and well.
+-- * `suspect`: if any member in the group cannot get a reply from any other member, the first member asks
+-- three other alive members to send a ping-message to the member in question. If there is no response,
+-- the latter becomes a suspect.
+-- * `dead`: a `suspect` becomes `dead` after a timeout.
+-- * `left`: a member gets the `left` status after executing the @{leave} function.
+--
+-- @tfield number incarnation a value incremented every time
+-- the instance status changes, or its payload is updated
+--
+-- @tfield table payload an auxiliary data that can be used by various modules
+--
+-- @tfield number timestamp a value of fiber.time64()
+-- which corresponds to the last update of status or incarnation;
+-- it is always local and does not depend on other members’ clock setting.
+--
+-- @usage tarantool> membership.myself()
+-- ---
+-- uri: "localhost:33001"
+-- status: "alive"
+-- incarnation: 1
+-- payload:
+--     uuid: "2d00c500-2570-4019-bfcc-ab25e5096b73"
+-- timestamp: 1522427330993752
+-- ...
+local function _member_pack(uri, member)
     checks('string', '?table')
     if not member then
         return nil
     end
+
     return {
         uri = uri,
         status = opts.STATUS_NAMES[member.status] or tostring(member.status),
@@ -614,7 +689,12 @@ function _member_pack(uri, member)
     }
 end
 
-function get_members()
+--- Obtain all members known to the current instance.
+--
+-- Editing this table has no effect.
+-- @function members
+-- @treturn table a table with URIs as keys and corresponding @{MemberInfo} as values.
+local function get_members()
     local ret = {}
     for uri, member in members.pairs() do
         ret[uri] = _member_pack(uri, member)
@@ -622,16 +702,45 @@ function get_members()
     return ret
 end
 
+--- Iterate over members.
+-- A shorthand for `pairs(membership.members())`.
+-- @function pairs
+-- @return Lua iterator
+-- @usage for uri, member in membership.pairs() do end
+
+--- Get info about member with the given URI.
+-- @function get_member
+-- @tparam string uri `<advertise_uri>` of member of interest
+-- @treturn MemberInfo the member data structure of the instance with the given URI.
 local function get_member(uri)
     local member = members.get(uri)
     return _member_pack(uri, member)
 end
 
+--- Get info about the current instance.
+-- @function myself
+-- @treturn MemberInfo the member data structure of the current instance.
 local function get_myself()
     local myself = members.myself()
     return _member_pack(opts.advertise_uri, myself)
 end
 
+--- Add a member to the group.
+-- Also propagate this event to other members.
+-- Adding a member to a single instance is enough
+-- as everybody else in the group will receive the update with time.
+-- It does not matter who adds whom.
+--
+-- **Warning:** The gossip protocol guarantees
+-- that every member in the group becomes aware
+-- of any status change in two communication cycles.
+--
+-- @function add_member
+-- @tparam string uri `<advertise_uri>` of member to add
+-- @treturn true|nil
+-- @treturn ?string Possible errors:
+--
+-- * `"parse error"` - if the URI can not be parsed
 local function add_member(uri)
     checks('string')
     local parts = uri_tools.parse(uri)
@@ -651,6 +760,26 @@ local function add_member(uri)
     return true
 end
 
+--- Send a ping to a member.
+-- Send a ping-message to a member to make sure it is in the group.
+--
+-- If the member responds but not in the group, it is added.
+--
+-- If it already is in the group, nothing happens.
+--
+-- **Warning:** When destination IP can be resolved in several diffent
+-- ways (by different hostnames) it is possible that `probe_uri()` function returns
+-- `"no responce"` error, but the member is added to the group with another URI,
+-- corresponding to its `<advertise_uri>`.
+--
+-- @function probe_uri
+-- @tparam string uri `<advertise_uri>` of member to ping
+-- @treturn true|nil
+-- @treturn ?string Possible errors:
+--
+-- * `"parse error"` - if the URI can not be parsed
+-- * `"ping was not sent"` - if hostname could not be reloved
+-- * `"no reponce"` - if member does not responf within 0.2 seconds
 local function probe_uri(uri)
     checks('string')
     local parts = uri_tools.parse(uri)
@@ -680,6 +809,11 @@ local function probe_uri(uri)
     return true
 end
 
+--- Update payload and disseminate it along with the member status.
+-- Also increments `incarnation`.
+-- @function set_payload
+-- @tparam string key a key to set in payload table
+-- @param value auxiliary data
 local function set_payload(key, value)
     checks('string', '?')
     local myself = members.myself()
@@ -709,8 +843,49 @@ return {
     add_member = add_member,
     get_member = get_member,
     set_payload = set_payload,
+
+--- Encryption Functions.
+-- The encryption is handled by the
+-- [`crypto.cipher.aes256.cbc`](https://tarantool.io/en/doc/latest/reference/reference_lua/crypto/)
+-- Tarantool module.
+--
+-- For proper communication, all members must be configured
+-- to use the same encryption key. Otherwise, members report
+-- either `dead` or `non-decryptable` in their status.
+-- @section encryption
+
+    --- Retrieve the encryption key that is currently in use.
+    -- @function get_encryption_key
+    -- @treturn string encryption key
     get_encryption_key = opts.get_encryption_key,
+
+    --- Set the key used for low-level message encryption.
+    -- The key is either trimmed or padded automatically to be exactly 32 bytes.
+    -- If the `key` value is `nil`, the encryption is disabled.
+    --
+    -- @function set_encryption_key
+    -- @tparam string key encryption key
+    -- @treturn nil
     set_encryption_key = opts.set_encryption_key,
+
+--- Subscription Functions.
+-- A subscription is implemented with Tarantool built-in
+-- [`fiber.cond`](https://tarantool.io/en/doc/latest/reference/reference_lua/fiber/#fiber-cond)
+-- objects.
+-- @section subsrcription
+
+    --- Subscribe for updates in the members table.
+    -- @function subscribe
+    -- @return `fiber.cond` object which is
+    -- broadcasted whenever the members table changes
     subscribe = events.subscribe,
+
+    --- Unsubscribe from membership updates.
+    -- Remove subscription on `cond` object.
+    --
+    -- If parameter passed is already unsubscribed o invaled nothing happens.
+    -- @function unsubscribe
+    -- @param cond `fiber.cond` object obtained from `subscribe` function
+    -- @treturn nil
     unsubscribe = events.unsubscribe,
 }
