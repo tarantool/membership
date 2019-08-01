@@ -5,7 +5,7 @@ import pytest
 import logging
 import time
 
-servers_list = [33001, 33002]
+servers_list = [13301, 13302]
 
 def check_payload(srv, uri, payload):
     member = srv.members()[uri]
@@ -13,30 +13,30 @@ def check_payload(srv, uri, payload):
     assert member['payload'] == payload
 
 def test(servers, helpers):
-    assert servers[33001].conn.eval('return membership.set_payload("foo1", {bar = "buzz"})')[0]
-    assert servers[33001].add_member('localhost:33002')
+    assert servers[13301].conn.eval('return membership.set_payload("foo1", {bar = "buzz"})')[0]
+    assert servers[13301].add_member('localhost:13302')
     helpers.wait_for(check_payload, [
-        servers[33002],
-        'localhost:33001',
+        servers[13302],
+        'localhost:13301',
         {
             'foo1': {'bar': 'buzz'}
         }
     ])
 
-    assert servers[33001].conn.eval('return membership.set_payload("foo2", 42)')[0]
+    assert servers[13301].conn.eval('return membership.set_payload("foo2", 42)')[0]
     helpers.wait_for(check_payload, [
-        servers[33002],
-        'localhost:33001',
+        servers[13302],
+        'localhost:13301',
         {
             'foo1': {'bar': 'buzz'},
             'foo2': 42
         }
     ])
 
-    assert servers[33001].conn.eval('return membership.set_payload("foo1", nil)')[0]
+    assert servers[13301].conn.eval('return membership.set_payload("foo1", nil)')[0]
     helpers.wait_for(check_payload, [
-        servers[33002],
-        'localhost:33001',
+        servers[13302],
+        'localhost:13301',
         {
             'foo2': 42
         }
