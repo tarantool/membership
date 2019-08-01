@@ -628,10 +628,11 @@ local function leave()
         incarnation = members.myself().incarnation,
         ttl = members.count(),
     })
-    local msg = msgpack.encode({opts.advertise_uri, 'LEAVE', msgpack.NULL, {event}})
+    local msg_msgpacked = msgpack.encode({opts.advertise_uri, 'LEAVE', msgpack.NULL, {event}})
+    local msg_encrypted = opts.encrypt(msg_msgpacked)
     for _, uri in ipairs(members.filter_excluding('unhealthy', opts.advertise_uri)) do
         local host, port = resolve(uri)
-        sock:sendto(host, port, msg)
+        sock:sendto(host, port, msg_encrypted)
     end
 
     sock:close()

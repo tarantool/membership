@@ -31,6 +31,14 @@ def test_enable_encryption(servers, helpers):
     helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'alive'])
     helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'alive'])
 
+    servers[13302].conn.eval('return membership.leave()')
+    check_status(servers[13301], 'localhost:13302', 'left')
+
+    servers[13302].conn.eval("""
+        assert(membership.init("localhost", 13302))
+        assert(membership.probe_uri("localhost:13301"))
+    """)
+    helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'alive'])
 
 def test_change_encryption(servers, helpers):
     servers[13301].conn.eval('return membership.set_encryption_key("YY")')
