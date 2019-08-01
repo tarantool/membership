@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Leaving membership with encryption enabled.
+  Due to the bug, other members reported 'dead' status instead of 'left'.
+
 ## [2.1.2] - 2019-06-02
 
 ### Added
