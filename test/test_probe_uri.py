@@ -3,9 +3,9 @@
 
 import pytest
 
-servers_list = [33001]
+servers_list = [13301]
 
 def test(servers, helpers):
-    assert servers[33001].probe_uri('127.0.0.1:33001') == None
-    assert servers[33001].probe_uri('localhost:33001') == True
-    assert servers[33001].probe_uri('localhost:33002') == None
+    assert servers[13301].probe_uri('127.0.0.1:13301') == None
+    assert servers[13301].probe_uri('localhost:13301') == True
+    assert servers[13301].probe_uri('localhost:13302') == None
