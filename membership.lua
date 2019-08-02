@@ -770,7 +770,7 @@ end
 --
 -- **Warning:** When destination IP can be resolved in several diffent
 -- ways (by different hostnames) it is possible that `probe_uri()` function returns
--- `"no responce"` error, but the member is added to the group with another URI,
+-- `"no response"` error, but the member is added to the group with another URI,
 -- corresponding to its `<advertise_uri>`.
 --
 -- @function probe_uri
@@ -804,7 +804,7 @@ local function probe_uri(uri)
 
     local ack = wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
     if not ack then
-        return nil, 'no responce'
+        return nil, 'no response'
     end
 
     return true
