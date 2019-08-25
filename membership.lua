@@ -107,10 +107,6 @@ local function send_message(uri, msg_type, msg_data)
             }
         end
 
-        -- Save some packet space:
-        -- Don't send to a member his own payload
-        extra_event.payload = nil
-
         table.insert(events_to_send, events.pack(extra_event))
         msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
         events_to_send[uri] = true
