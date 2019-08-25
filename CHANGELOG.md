@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.1.4] - 2019-08-25
+
+### Fixed
+
+- In some cases membership did disseminate invalid (nil) payload.
+  The bug relates versions 2.1.2, 2.1.3.
+
 ## [2.1.3] - 2019-08-01
 
 ### Fixed
