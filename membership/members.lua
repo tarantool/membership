@@ -11,6 +11,7 @@ local _all_members = {
     --     incarnation = number,
     --     timestamp = time64,
     --     payload = ?table,
+    --     clock_delta = ?number
     -- }
 
     -- uri is a string in format '<host>:<port>'
@@ -76,8 +77,8 @@ function members.filter_excluding(state, uri1, uri2)
     return ret
 end
 
-function members.set(uri, status, incarnation, payload)
-    checks('string', 'number', 'number', '?table')
+function members.set(uri, status, incarnation, params)
+    checks('string', 'number', 'number', { payload = '?table', clock_delta = '?number' })
 
     local member = _all_members[uri]
     if member and incarnation < member.incarnation then
@@ -87,8 +88,9 @@ function members.set(uri, status, incarnation, payload)
     _all_members[uri] = {
         status = status,
         incarnation = incarnation,
-        payload = payload or (member or {}).payload,
+        payload = (params or {}).payload or (member or {}).payload,
         timestamp = fiber.time64(),
+        clock_delta = (params or {}).clock_delta or (member or {}).clock_delta
     }
 end
 
