@@ -5,8 +5,6 @@ import os
 import pytest
 import socket
 import logging
-import tempfile
-import py
 import time
 import yaml
 
@@ -18,6 +16,7 @@ logging.basicConfig(format='%(name)s > %(message)s', level=logging.INFO)
 
 TARANTOOL_CONNECTION_TIMEOUT = 10.0
 MEMBERSHIP_UPDATE_TIMEOUT = 3.0
+
 
 class Helpers:
     @staticmethod
@@ -32,15 +31,17 @@ class Helpers:
 
             try:
                 return fn(*args, **kwargs)
-            except:
+            except:  # noqa: E722
                 time.sleep(0.1)
 
         # after timeout call fn once more to propagate exception
         return fn(*args, **kwargs)
 
+
 @pytest.fixture(scope='session')
 def helpers():
     return Helpers
+
 
 class Console(object):
     def __init__(self, addr, port):
@@ -70,6 +71,7 @@ class Console(object):
         sendall(fcmd)
         return yaml.safe_load(recvall())
 
+
 class Server(object):
     def __init__(self, hostname, port):
         self.logger = logging.getLogger('localhost:{}'.format(port))
@@ -95,27 +97,26 @@ class Server(object):
     def consume_lines(self):
         with self.process.stdout as pipe:
             for line in iter(pipe.readline, b''):
-                l = line.strip().decode('utf-8')
+                l = line.strip().decode('utf-8')  # noqa: E741
                 self.logger.warning(l)
                 if 'stack traceback:' in l:
                     self.seen_traceback = True
 
-
     def connect(self):
         assert self.process.poll() is None
-        if self.conn == None:
+        if self.conn is None:
             self.conn = Console('127.0.0.1', self.port)
 
         assert self.conn.eval('return is_initialized')[0]
 
     def kill(self):
-        if self.conn != None:
+        if self.conn is not None:
             # logging.warning('Closing connection to {}'.format(self.port))
             self.conn.close()
             self.conn = None
         self.process.kill()
         logging.warning('localhost:{} killed'.format(self.port))
-        if self.thread != None:
+        if self.thread is not None:
             self.thread.join()
 
     def add_member(self, uri):
@@ -144,6 +145,7 @@ class Server(object):
     def myself(self):
         cmd = "return membership.myself()"
         return self.conn.eval(cmd)[0]
+
 
 @pytest.fixture(scope="module")
 def servers(request, helpers):

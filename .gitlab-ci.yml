@@ -18,10 +18,13 @@ build:
     - yum -y install https://centos7.iuscommunity.org/ius-release.rpm
     - yum -y install git gcc make cmake unzip python36u-pip
     - tarantoolctl rocks install ldoc --server=http://rocks.moonscript.org
+    - tarantoolctl rocks install luacheck
     - export PATH=.rocks/bin:$PATH
     - pip3.6 install -r test/requirements.txt
   script:
     - tarantoolctl rocks make BUILD_DOC=YES
+    - .rocks/bin/luacheck membership-scm-1.rockspec
+    - flake8 test --ignore=E501
     - pytest -v
     - ./release.sh
   artifacts:

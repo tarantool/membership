@@ -14,7 +14,6 @@
 
 local log = require('log')
 local uri_tools = require('uri')
-local json = require('json')
 local fiber = require('fiber')
 local checks = require('checks')
 local socket = require('socket')
@@ -280,6 +279,7 @@ local function handle_message(msg)
         events.handle(event)
     end
 
+    -- luacheck:ignore 542
     if msg_type == 'PING' then
         if msg_data.dst == opts.advertise_uri then
             send_message(sender_uri, 'ACK', msg_data)
@@ -478,22 +478,6 @@ end
 -- ANTI ENTROPY SYNC
 --
 
-local function wait_sync(uri, timeout)
-    local now
-    local deadline = ts + timeout
-    repeat
-        now = fiber.time64()
-
-        for _, ack in ipairs(_ack_cache) do
-            if ack.dst == uri and ack.ts == ts then
-                return true
-            end
-        end
-    until (now >= deadline) or not _ack_trigger:wait(tonumber(deadline - now) / 1.0e6)
-
-    return false
-end
-
 local function anti_entropy_step()
     local alive_members = members.filter_excluding('unhealthy', opts.advertise_uri)
     local alive_cnt = #alive_members
@@ -590,7 +574,7 @@ local function broadcast(port)
 
     local bcast_sent = false
 
-    for ifa, addr in pairs(netlist) do
+    for _, addr in pairs(netlist) do
         local uri = addr.bcast or addr.inet4
         if uri then
             local uri = string.format('%s:%s', uri, port)
