@@ -11,6 +11,7 @@ local _all_members = {
     --     incarnation = number,
     --     timestamp = time64,
     --     payload = ?table,
+    --     clock_delta = ?number
     -- }
 
     -- uri is a string in format '<host>:<port>'
@@ -76,19 +77,34 @@ function members.filter_excluding(state, uri1, uri2)
     return ret
 end
 
-function members.set(uri, status, incarnation, payload)
-    checks('string', 'number', 'number', '?table')
+function members.set(uri, status, incarnation, params)
+    checks('string', 'number', 'number', { payload = '?table', clock_delta = '?number' })
 
     local member = _all_members[uri]
     if member and incarnation < member.incarnation then
         error('Can not downgrade incarnation')
     end
 
+    local payload
+    if params ~= nil and params.payload ~= nil then
+        payload = params.payload
+    elseif member ~= nil then
+        payload = member.payload
+    end
+
+    local clock_delta
+    if params ~= nil and params.clock_delta ~= nil then
+        clock_delta = params.clock_delta
+    elseif member ~= nil then
+        clock_delta = member.clock_delta
+    end
+
     _all_members[uri] = {
         status = status,
         incarnation = incarnation,
-        payload = payload or (member or {}).payload,
+        payload = payload,
         timestamp = fiber.time64(),
+        clock_delta = clock_delta
     }
 end
 
