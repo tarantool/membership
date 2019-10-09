@@ -11,7 +11,7 @@ def check_status(srv, uri, status):
 
 def check_clock_delta(srv, uri):
     member = srv.members()[uri]
-    assert member['clock_delta'] >= 0
+    assert member['clock_delta'] is not None
 
 
 def test_clock_diff(servers, helpers):

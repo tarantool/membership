@@ -381,12 +381,12 @@ local function wait_ack(uri, ts, timeout)
 
         for _, ack in ipairs(_ack_cache) do
             if ack.dst == uri and ack.ts == ts then
-                return true, ack
+                return ack
             end
         end
     until (now >= deadline) or not _ack_trigger:wait(tonumber(deadline - now) / 1.0e6)
 
-    return false
+    return nil
 end
 
 local function _get_clock_delta(ack_data)
@@ -399,7 +399,7 @@ local function _get_clock_delta(ack_data)
         return nil
     end
 
-    return math.abs(ack_ts - (recv_ts + start_ts) / 2)
+    return ack_ts - (recv_ts + start_ts) / 2
 end
 
 local _protocol_round_list = {}
@@ -441,8 +441,8 @@ local function protocol_step()
 
     -- try direct ping
     if send_message(uri, 'PING', msg_data) then
-        local ok, ack_data = wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
-        if ok then
+        local ack_data = wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
+        if ack_data ~= nil then
             local member = members.get(uri)
             -- calculate time difference between local time and member time
             local delta = _get_clock_delta(ack_data)
@@ -469,17 +469,17 @@ local function protocol_step()
         end
     end
 
+    local ack_data
     if sent_indirect > 0 then
-        local ok, ack_data = wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6)
-        if ok then
-            local member = members.get(uri)
-            -- calculate time difference between local time and member time
-            local delta = _get_clock_delta(ack_data)
-            members.set(uri, member.status, member.incarnation, { clock_delta = delta })
-            return
-        end
+        ack_data = wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6)
     end
-    if members.get(uri).status == opts.ALIVE then
+    if sent_indirect > 0 and ack_data ~= nil then
+        local member = members.get(uri)
+        -- calculate time difference between local time and member time
+        local delta = _get_clock_delta(ack_data)
+        members.set(uri, member.status, member.incarnation, { clock_delta = delta })
+        return
+    elseif members.get(uri).status == opts.ALIVE then
         log.info('Could not reach node: %s - %s', uri, opts.STATUS_NAMES[opts.SUSPECT])
         events.generate(uri, opts.SUSPECT)
         return
@@ -690,7 +690,7 @@ end
 -- it is always local and does not depend on other members’ clock setting.
 --
 -- @tfield number clock_delta difference of clocks (fiber.time64) between self and peer
--- calculates while ping/ack protocol step or while probe_uri call
+-- calculated during ping/ack protocol step or while probe_uri call
 --
 -- @usage tarantool> membership.myself()
 -- ---
@@ -830,8 +830,8 @@ local function probe_uri(uri)
         return nil, 'ping was not sent'
     end
 
-    local ok, ack_data = wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
-    if not ok then
+    local ack_data = wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
+    if ack_data == nil then
         return nil, 'no response'
     end
 

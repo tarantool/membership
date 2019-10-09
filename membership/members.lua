@@ -85,12 +85,26 @@ function members.set(uri, status, incarnation, params)
         error('Can not downgrade incarnation')
     end
 
+    local payload
+    if params ~= nil and params.payload ~= nil then
+        payload = params.payload
+    elseif member ~= nil then
+        payload = member.payload
+    end
+
+    local clock_delta
+    if params ~= nil and params.clock_delta ~= nil then
+        clock_delta = params.clock_delta
+    elseif member ~= nil then
+        clock_delta = member.clock_delta
+    end
+
     _all_members[uri] = {
         status = status,
         incarnation = incarnation,
-        payload = (params or {}).payload or (member or {}).payload,
+        payload = payload,
         timestamp = fiber.time64(),
-        clock_delta = (params or {}).clock_delta or (member or {}).clock_delta
+        clock_delta = clock_delta
     }
 end
 
