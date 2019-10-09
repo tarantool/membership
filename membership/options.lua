@@ -108,7 +108,7 @@ function options.decrypt(msg)
 end
 
 setmetatable(options, {
-    __newindex = function(tbl, idx, val)
+    __newindex = function(_, idx, val)
         print(idx, val)
         error("options table is readonly")
     end

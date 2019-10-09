@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import pytest
-import logging
-import time
-
 servers_list = [13301, 13302]
+
 
 def check_payload(srv, uri, payload):
     member = srv.members()[uri]
     assert member['status'] == 'alive'
     assert member['payload'] == payload
+
 
 def test(servers, helpers):
     assert servers[13301].conn.eval('return membership.set_payload("foo1", {bar = "buzz"})')[0]
