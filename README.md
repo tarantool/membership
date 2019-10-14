@@ -1,4 +1,4 @@
-[![pipeline status](https://gitlab.com/tarantool/ib-core/membership/badges/master/pipeline.svg)](https://gitlab.com/tarantool/ib-core/membership/commits/master)
+[![pipeline status](https://gitlab.com/tarantool/membership/badges/master/pipeline.svg)](https://gitlab.com/tarantool/membership/commits/master)
 
 # Membership library for Tarantool based on a gossip protocol
 
@@ -18,11 +18,15 @@ A member is represented by the table with fields:
 
 * `uri`
 * `status` is a string: `alive`, `suspect`, `dead` or `left`
-* `incarnation` which is incremented every time the instance is being suspected or dead or updates its payload
-* `payload` is a table with auxiliary data, which can be used by various modules to do whatever they want
-* `timestamp` is a value of `fiber.time64()`
-`timestamp` corresponds to the last update of status or incarnation.
-`timestamp` is always local and does not depent on other members' clock setting.
+* `incarnation` which is incremented every time the instance is being
+  suspected or dead or updates its payload
+* `payload` is a table with auxiliary data, which can be used by various
+  modules to do whatever they want
+* `timestamp` is a value of `fiber.time64()` (in microseconds),
+  corresponding to the last update of status or incarnation. `timestamp`
+  is always local and does not depent on other members' clock setting.
+* `clock_delta` is a time drift between member's clock (remote) and the
+  local one (in microseconds).
 
 Example:
 
@@ -34,5 +38,6 @@ incarnation: 1
 payload:
     uuid: "2d00c500-2570-4019-bfcc-ab25e5096b73"
 timestamp: 1522427330993752
+clock_delta: 27810
 ...
 ```

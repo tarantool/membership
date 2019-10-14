@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- New field `member.clock_delta`, which indicates difference between
+  remote and local clocks.
+
 ## [2.1.4] - 2019-08-25
 
 ### Fixed
