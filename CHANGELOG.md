@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.2.0] - 2019-10-22
+
 ### Added
 
 - New field `member.clock_delta`, which indicates difference between
