@@ -57,14 +57,14 @@ class Console(object):
             return self.sock.sendall(msg.encode())
 
         def recvall():
-            data = []
+            data = ''
             while True:
                 chunk = self.sock.recv(1024).decode()
-                data.append(chunk)
-                if chunk.endswith('\n...\n'):
+                data = data + chunk
+                if data.endswith('\n...\n'):
                     break
 
-            return ''.join(data)
+            return data
 
         lines = [l.strip() for l in cmd.split('\n') if l.strip()]
         fcmd = ' '.join(lines) + '\n'
