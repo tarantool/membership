@@ -626,6 +626,9 @@ end
 local function leave()
     -- First, we need to stop all fibers
     local sock = _sock
+    if sock == nil then
+        return false
+    end
     _sock = nil
 
     -- Perform artificial events.generate() and instantly send it
