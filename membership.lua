@@ -622,8 +622,14 @@ end
 -- The node will be marked with the status `left`
 -- and no other members will ever try to reconnect it.
 -- @function leave
--- @treturn boolean `true`
+-- @treturn boolean
+--  `true` if call succeeds,
+--  `false` if member has already left.
 local function leave()
+    if _sock == nil then
+        return false
+    end
+
     -- First, we need to stop all fibers
     local sock = _sock
     _sock = nil

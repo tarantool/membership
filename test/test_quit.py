@@ -17,6 +17,7 @@ def test_join(servers, helpers):
 def test_quit(servers, helpers):
     assert servers[13302].conn.eval('return membership.leave()')[0]
     helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'left'])
+    assert servers[13302].conn.eval('return membership.leave()')[0] is False
 
 
 def test_rejoin(servers, helpers):

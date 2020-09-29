@@ -15,7 +15,7 @@ build:
     - tar -xzf tarantool-enterprise-bundle-${BUNDLE_VERSION}.tar.gz
     - rm -rf tarantool-enterprise-bundle-${BUNDLE_VERSION}.tar.gz
     - export PATH=$PWD/tarantool-enterprise:$PATH
-    - yum -y install https://centos7.iuscommunity.org/ius-release.rpm
+    - yum -y install https://repo.ius.io/ius-release-el7.rpm
     - yum -y install git gcc make cmake unzip python36u-pip
     - tarantoolctl rocks install ldoc --server=http://rocks.moonscript.org
     - tarantoolctl rocks install luacheck
