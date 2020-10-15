@@ -1,5 +1,3 @@
-#!/usr/bin/env tarantool
-
 --- Membership library for Tarantool based on a gossip protocol.
 -- This library builds a mesh from multiple tarantool instances. The
 -- mesh monitors itself, helps members discover everyone else and get
@@ -28,39 +26,39 @@ local _sock = nil
 local _sync_trigger = fiber.cond()
 local _ack_trigger = fiber.cond()
 local _ack_cache = {}
-
 local _resolve_cache = {}
+
 local function resolve(uri)
     checks('string')
 
     local member = members.get(uri)
-    if member and member.status == opts.ALIVE then
-        local _cached = _resolve_cache[uri]
-        if _cached then
-            return unpack(_cached)
-        end
+    local cached = _resolve_cache[uri]
+    if cached and member and member.status == opts.ALIVE then
+        return cached
     end
 
     local parts = uri_tools.parse(uri)
     if not parts then
-        return nil, nil, 'parse error'
+        return nil, 'parse error'
     end
 
-    local hosts = socket.getaddrinfo(parts.host, parts.service, {family='AF_INET', type='SOCK_DGRAM'})
-    if hosts == nil or #hosts == 0 then
-        return nil, nil, 'getaddrinfo failed'
+    local addrinfo = socket.getaddrinfo(
+        parts.host, parts.service,
+        {family='AF_INET', type='SOCK_DGRAM'}
+    )
+    if addrinfo == nil then
+        return nil, 'getaddrinfo failed'
     end
 
-    local _cached = {hosts[1].host, hosts[1].port}
-    _resolve_cache[uri] = _cached
-    return unpack(_cached)
+    _resolve_cache[uri] = addrinfo[1]
+    return addrinfo[1]
 end
+
 local function nslookup(host, port)
     checks('string', 'number')
 
     for uri, cache in pairs(_resolve_cache) do
-        local cached_host, cached_port = unpack(cache)
-        if (cached_host == host) and (cached_port == port) then
+        if (cache.host == host) and (cache.port == port) then
             return uri
         end
     end
@@ -85,8 +83,8 @@ end
 
 local function send_message(uri, msg_type, msg_data)
     checks('string', 'string', 'table')
-    local host, port = resolve(uri)
-    if not host then
+    local addr = resolve(uri)
+    if not addr then
         return false
     end
 
@@ -182,7 +180,7 @@ local function send_message(uri, msg_type, msg_data)
 
     local msg_msgpacked = msgpack.encode(msg_raw)
     local msg_encrypted = opts.encrypt(msg_msgpacked)
-    local ret = _sock:sendto(host, port, msg_encrypted)
+    local ret = _sock:sendto(addr.host, addr.port, msg_encrypted)
     return ret and ret > 0
 end
 
@@ -190,8 +188,8 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     -- send to `uri` all local members that are not in `remote_tbl`
     -- well, not all actualy, but all that fits into UDP packet
     checks('string', 'string', 'table')
-    local host, port = resolve(uri)
-    if not host then
+    local addr = resolve(uri)
+    if not addr then
         return false
     end
 
@@ -224,7 +222,7 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
 
     local msg_msgpacked = msgpack.encode(msg_raw)
     local msg_encrypted = opts.encrypt(msg_msgpacked)
-    local ret = _sock:sendto(host, port, msg_encrypted)
+    local ret = _sock:sendto(addr.host, addr.port, msg_encrypted)
     return ret and ret > 0
 end
 
@@ -248,7 +246,10 @@ local function handle_message(msg)
         return false
     end
 
-    local sender_uri, msg_type, msg_data, new_events = unpack(decoded)
+    local sender_uri = decoded[1]
+    local msg_type = decoded[2]
+    local msg_data = decoded[3]
+    local new_events = decoded[4]
 
     for _, event in ipairs(new_events or {}) do
         local event = events.unpack(event)
@@ -644,8 +645,10 @@ local function leave()
     local msg_msgpacked = msgpack.encode({opts.advertise_uri, 'LEAVE', msgpack.NULL, {event}})
     local msg_encrypted = opts.encrypt(msg_msgpacked)
     for _, uri in ipairs(members.filter_excluding('unhealthy', opts.advertise_uri)) do
-        local host, port = resolve(uri)
-        sock:sendto(host, port, msg_encrypted)
+        local addr = resolve(uri)
+        if addr then
+            sock:sendto(addr.host, addr.port, msg_encrypted)
+        end
     end
 
     sock:close()
