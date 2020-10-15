@@ -25,10 +25,6 @@ function members.pairs()
     return pairs(_all_members)
 end
 
-function members.myself()
-    return _all_members[opts.advertise_uri]
-end
-
 function members.get(uri)
     return _all_members[uri]
 end

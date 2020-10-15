@@ -53,10 +53,6 @@ options.MAX_PACKET_SIZE = 1472
 
 options.ENCRYPTION_INIT = 'init-key-16-byte' -- !!KEEP string len SYNCED with cryptoapi
 
-function options.set_advertise_uri(uri)
-    rawset(options, 'advertise_uri', uri)
-end
-
 function options.get_encryption_key()
     return options.encryption_key
 end
