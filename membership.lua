@@ -42,12 +42,12 @@ local function resolve(uri)
         return nil, 'parse error'
     end
 
-    local addrinfo = socket.getaddrinfo(
+    local addrinfo, err = socket.getaddrinfo(
         parts.host, parts.service,
         {family='AF_INET', type='SOCK_DGRAM'}
     )
     if addrinfo == nil then
-        return nil, 'getaddrinfo failed'
+        return nil, err or 'getaddrinfo failed'
     end
 
     _resolve_cache[uri] = addrinfo[1]
