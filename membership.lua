@@ -22,11 +22,13 @@ local events = require('membership.events')
 local members = require('membership.members')
 local network = require('membership.network')
 
-local _sock = nil
 local _sync_trigger = fiber.cond()
 local _ack_trigger = fiber.cond()
 local _ack_cache = {}
 local _resolve_cache = {}
+
+local _sock = nil
+local advertise_uri = nil
 
 local function resolve(uri)
     checks('string')
@@ -89,7 +91,7 @@ local function send_message(uri, msg_type, msg_data)
     end
 
     local events_to_send = {}
-    local msg_raw = {opts.advertise_uri, msg_type, msg_data, events_to_send}
+    local msg_raw = {advertise_uri, msg_type, msg_data, events_to_send}
     local msg_size = #msgpack.encode(msg_raw)
 
     if members.get(uri) then
@@ -109,11 +111,11 @@ local function send_message(uri, msg_type, msg_data)
         events_to_send[uri] = true
     end
 
-    local extra_event = events.get(opts.advertise_uri)
-    if extra_event == nil and not events_to_send[opts.advertise_uri] then
-        local myself = members.myself()
+    local extra_event = events.get(advertise_uri)
+    if extra_event == nil and not events_to_send[advertise_uri] then
+        local myself = members.get(advertise_uri)
         extra_event = {
-            uri = opts.advertise_uri,
+            uri = advertise_uri,
             status = opts.ALIVE,
             incarnation = myself.incarnation,
             payload = myself.payload,
@@ -123,7 +125,7 @@ local function send_message(uri, msg_type, msg_data)
     if extra_event ~= nil then
         table.insert(events_to_send, events.pack(extra_event))
         msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
-        events_to_send[opts.advertise_uri] = true
+        events_to_send[advertise_uri] = true
     end
 
     for _, event in events.pairs() do
@@ -194,7 +196,7 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     end
 
     local members_to_send = {}
-    local msg_raw = {opts.advertise_uri, msg_type, members_to_send, {}}
+    local msg_raw = {advertise_uri, msg_type, members_to_send, {}}
     local msg_size = #msgpack.encode(msg_raw)
 
     local random_members = random_permutation(members.filter_excluding(nil))
@@ -254,9 +256,9 @@ local function handle_message(msg)
     for _, event in ipairs(new_events or {}) do
         local event = events.unpack(event)
 
-        if event.uri == opts.advertise_uri then
+        if event.uri == advertise_uri then
             -- this is a rumor about ourselves
-            local myself = members.myself()
+            local myself = members.get(advertise_uri)
 
             if event.status ~= opts.ALIVE and event.incarnation >= myself.incarnation then
                 -- someone thinks that we are dead
@@ -282,11 +284,11 @@ local function handle_message(msg)
 
     -- luacheck:ignore 542
     if msg_type == 'PING' then
-        if msg_data.dst == opts.advertise_uri then
+        if msg_data.dst == advertise_uri then
             -- set ack timestamp
             msg_data.ats = fiber.time64()
             send_message(sender_uri, 'ACK', msg_data)
-        elseif sender_uri == opts.advertise_uri then
+        elseif sender_uri == advertise_uri then
             -- seems to be a local loop
             -- drop it
         elseif msg_data.dst ~= nil then
@@ -296,7 +298,7 @@ local function handle_message(msg)
             log.error('Message PING without destination uri')
         end
     elseif msg_type == 'ACK' then
-        if msg_data.src == opts.advertise_uri then
+        if msg_data.src == advertise_uri then
             -- set receive timestamp
             msg_data.rts = fiber.time64()
             table.insert(_ack_cache, msg_data)
@@ -436,7 +438,7 @@ local function protocol_step()
 
     local msg_data = {
         ts = loop_now,
-        src = opts.advertise_uri,
+        src = advertise_uri,
         dst = uri,
     }
 
@@ -458,7 +460,7 @@ local function protocol_step()
 
     local sent_indirect = 0
     local through_uri_list = random_permutation(
-        members.filter_excluding('unhealthy', opts.advertise_uri, uri)
+        members.filter_excluding('unhealthy', advertise_uri, uri)
     )
     for _, through_uri in ipairs(through_uri_list) do
         if send_message(through_uri, 'PING', msg_data) then
@@ -551,8 +553,10 @@ end
 -- In order to leave the group gracefully use the @{leave} function.
 --
 -- @function init
--- @tparam string advertise_host A hostname or IP address being advertised to other members
--- @tparam number port A UDP port to bind
+-- @tparam string advertise_host
+--   either hostname or IP address being advertised to other members
+-- @tparam number port
+--   UDP port to bind and advertise
 -- @treturn boolean `true`
 -- @raise Socket bind error
 local function init(advertise_host, port)
@@ -568,8 +572,10 @@ local function init(advertise_host, port)
     _sock:nonblock(true)
     _sock:setsockopt('SOL_SOCKET', 'SO_BROADCAST', 1)
 
-    local advertise_uri = uri_tools.format({host = advertise_host, service = tostring(port)})
-    opts.set_advertise_uri(advertise_uri)
+    advertise_uri = uri_tools.format({
+        host = advertise_host,
+        service = tostring(port)
+    })
     events.generate(advertise_uri, opts.ALIVE, 1, {})
 
     fiber.create(protocol_loop)
@@ -590,8 +596,8 @@ local function broadcast(port)
 
     local msg_data = {
         ts = fiber.time64(),
-        src = opts.advertise_uri,
-        dst = opts.advertise_uri,
+        src = advertise_uri,
+        dst = advertise_uri,
     }
 
     local ok, netlist = pcall(network.getifaddrs)
@@ -636,15 +642,16 @@ local function leave()
     _sock = nil
 
     -- Perform artificial events.generate() and instantly send it
+    local myself = members.get(advertise_uri)
     local event = events.pack({
-        uri = opts.advertise_uri,
+        uri = advertise_uri,
         status = opts.LEFT,
-        incarnation = members.myself().incarnation,
+        incarnation = myself.incarnation,
         ttl = members.count(),
     })
-    local msg_msgpacked = msgpack.encode({opts.advertise_uri, 'LEAVE', msgpack.NULL, {event}})
+    local msg_msgpacked = msgpack.encode({advertise_uri, 'LEAVE', msgpack.NULL, {event}})
     local msg_encrypted = opts.encrypt(msg_msgpacked)
-    for _, uri in ipairs(members.filter_excluding('unhealthy', opts.advertise_uri)) do
+    for _, uri in ipairs(members.filter_excluding('unhealthy', advertise_uri)) do
         local addr = resolve(uri)
         if addr then
             sock:sendto(addr.host, addr.port, msg_encrypted)
@@ -743,8 +750,10 @@ end
 -- @function myself
 -- @treturn MemberInfo the member data structure of the current instance.
 local function get_myself()
-    local myself = members.myself()
-    return _member_pack(opts.advertise_uri, myself)
+    return _member_pack(
+        advertise_uri,
+        members.get(advertise_uri)
+    )
 end
 
 --- Add a member to the group.
@@ -814,7 +823,7 @@ local function probe_uri(uri)
     local loop_now = fiber.time64()
     local msg_data = {
         ts = loop_now,
-        src = opts.advertise_uri,
+        src = advertise_uri,
         dst = uri,
     }
 
@@ -844,7 +853,7 @@ end
 -- @param value auxiliary data
 local function set_payload(key, value)
     checks('string', '?')
-    local myself = members.myself()
+    local myself = members.get(advertise_uri)
     local payload = myself.payload
     if payload[key] == value then
         return true
@@ -852,7 +861,7 @@ local function set_payload(key, value)
 
     payload[key] = value
     events.generate(
-        opts.advertise_uri,
+        advertise_uri,
         myself.status,
         myself.incarnation + 1,
         payload
