@@ -25,3 +25,21 @@ def test_recover(servers, helpers):
     helpers.wait_for(servers[13302].connect)
     helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'alive'])
     helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'alive'])
+
+
+def test_reinit(servers, helpers):
+    assert servers[13301].add_member('localhost:13302')
+    helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'alive'])
+
+    # Change hostname
+    cmd = "return membership.init('127.0.0.1', 13301)"
+    assert servers[13301].conn.eval(cmd)[0]
+    helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'dead'])
+    helpers.wait_for(check_status, [servers[13302], '127.0.0.1:13301', 'alive'])
+
+    # Change port
+    cmd = "return membership.init('127.0.0.1', 13303)"
+    assert servers[13301].conn.eval(cmd)[0]
+    helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'dead'])
+    helpers.wait_for(check_status, [servers[13302], '127.0.0.1:13301', 'dead'])
+    helpers.wait_for(check_status, [servers[13302], '127.0.0.1:13303', 'alive'])
