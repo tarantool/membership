@@ -30,6 +30,16 @@ local _resolve_cache = {}
 local _sock = nil
 local advertise_uri = nil
 
+local _handle_fiber = nil
+local _protocol_fiber = nil
+local _anti_entropy_fiber = nil
+
+local function fiber_cancel(f)
+    if f ~= nil and f:status() ~= 'dead' then
+        f:cancel()
+    end
+end
+
 local function resolve(uri)
     checks('string')
 
@@ -336,10 +346,8 @@ local function handle_message(msg)
 end
 
 local function handle_message_step()
-    local sock = _sock
     local ok = _sock:readable(opts.PROTOCOL_PERIOD_SECONDS)
-    -- check that socket was not closed by leave() call yet
-    if not ok or sock ~= _sock then
+    if not ok then
         return
     end
 
@@ -362,9 +370,10 @@ local function handle_message_step()
 end
 
 local function handle_message_loop()
-    local sock = _sock
-    while sock == _sock do
+    fiber.name('membership.handle')
+    while true do
         local ok, res = xpcall(handle_message_step, debug.traceback)
+        fiber.testcancel()
 
         if not ok then
             log.error(res)
@@ -490,10 +499,11 @@ local function protocol_step()
 end
 
 local function protocol_loop()
-    local sock = _sock
-    while sock == _sock do
+    fiber.name('membership.main')
+    while true do
         local t1 = fiber.time()
         local ok, res = xpcall(protocol_step, debug.traceback)
+        fiber.testcancel()
 
         if not ok then
             log.error(res)
@@ -521,9 +531,11 @@ local function anti_entropy_step()
 end
 
 local function anti_entropy_loop()
-    local sock = _sock
-    while sock == _sock do
+    fiber.name('membership.entropy')
+
+    while true do
         local ok, res = xpcall(anti_entropy_step, debug.traceback)
+        fiber.testcancel()
 
         if not ok then
             log.error(res)
@@ -562,15 +574,23 @@ end
 local function init(advertise_host, port)
     checks('string', 'number')
 
-    _sock = socket('AF_INET', 'SOCK_DGRAM', 'udp')
-    local ok = _sock:bind('0.0.0.0', port)
-    if not ok then
-        local err = string.format('Socket bind error: %s', _sock:error())
-        log.error('%s', err)
-        error(err)
+    if _sock == nil or _sock:name().port ~= port then
+        local sock = socket('AF_INET', 'SOCK_DGRAM', 'udp')
+        local ok = sock:bind('0.0.0.0', port)
+        if not ok then
+            local err = string.format('Socket bind error: %s', _sock:error())
+            log.error(err)
+            error(err)
+        end
+        sock:nonblock(true)
+        sock:setsockopt('SOL_SOCKET', 'SO_BROADCAST', 1)
+
+        if _sock then
+            _sock:close()
+        end
+
+        _sock = sock
     end
-    _sock:nonblock(true)
-    _sock:setsockopt('SOL_SOCKET', 'SO_BROADCAST', 1)
 
     advertise_uri = uri_tools.format({
         host = advertise_host,
@@ -578,9 +598,13 @@ local function init(advertise_host, port)
     })
     events.generate(advertise_uri, opts.ALIVE, 1, {})
 
-    fiber.create(protocol_loop)
-    fiber.create(handle_message_loop)
-    fiber.create(anti_entropy_loop)
+    fiber_cancel(_handle_fiber)
+    fiber_cancel(_protocol_fiber)
+    fiber_cancel(_anti_entropy_fiber)
+    _handle_fiber = fiber.new(handle_message_loop)
+    _protocol_fiber = fiber.new(protocol_loop)
+    _anti_entropy_fiber = fiber.new(anti_entropy_loop)
+
     return true
 end
 
@@ -638,8 +662,12 @@ local function leave()
     end
 
     -- First, we need to stop all fibers
-    local sock = _sock
-    _sock = nil
+    fiber_cancel(_handle_fiber)
+    fiber_cancel(_protocol_fiber)
+    fiber_cancel(_anti_entropy_fiber)
+    _handle_fiber = nil
+    _protocol_fiber = nil
+    _anti_entropy_fiber = nil
 
     -- Perform artificial events.generate() and instantly send it
     local myself = members.get(advertise_uri)
@@ -654,11 +682,13 @@ local function leave()
     for _, uri in ipairs(members.filter_excluding('unhealthy', advertise_uri)) do
         local addr = resolve(uri)
         if addr then
-            sock:sendto(addr.host, addr.port, msg_encrypted)
+            _sock:sendto(addr.host, addr.port, msg_encrypted)
         end
     end
 
-    sock:close()
+    _sock:close()
+    _sock = nil
+
     members.clear()
     events.clear()
     table.clear(_protocol_round_list)
