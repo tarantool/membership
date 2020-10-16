@@ -370,7 +370,7 @@ local function handle_message_step()
 end
 
 local function handle_message_loop()
-    fiber.name('swim.handle')
+    fiber.name('membership.handle')
     while true do
         local ok, res = xpcall(handle_message_step, debug.traceback)
         fiber.testcancel()
@@ -499,7 +499,7 @@ local function protocol_step()
 end
 
 local function protocol_loop()
-    fiber.name('swim.main')
+    fiber.name('membership.main')
     while true do
         local t1 = fiber.time()
         local ok, res = xpcall(protocol_step, debug.traceback)
@@ -531,7 +531,7 @@ local function anti_entropy_step()
 end
 
 local function anti_entropy_loop()
-    fiber.name('swim.entropy')
+    fiber.name('membership.entropy')
 
     while true do
         local ok, res = xpcall(anti_entropy_step, debug.traceback)
@@ -579,7 +579,7 @@ local function init(advertise_host, port)
         local ok = sock:bind('0.0.0.0', port)
         if not ok then
             local err = string.format('Socket bind error: %s', _sock:error())
-            log.error('%s', err)
+            log.error(err)
             error(err)
         end
         sock:nonblock(true)
