@@ -27,6 +27,7 @@ build = {
     install = {
         lua = {
             ['membership'] = 'membership.lua',
+            ['membership.stash'] = 'membership/stash.lua',
             ['membership.events'] = 'membership/events.lua',
             ['membership.members'] = 'membership/members.lua',
             ['membership.options'] = 'membership/options.lua',

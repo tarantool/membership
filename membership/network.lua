@@ -1,74 +1,78 @@
-#!/usr/bin/env tarantool
-
 local ffi = require('ffi')
 local bit = require('bit')
 
-ffi.cdef([[
-struct ifaddrs {
-    struct ifaddrs  *ifa_next;    /* Next item in list */
-    char            *ifa_name;    /* Name of interface */
-    unsigned int     ifa_flags;   /* Flags from SIOCGIFFLAGS */
-    struct sockaddr *ifa_addr;    /* Address of interface */
-    struct sockaddr *ifa_netmask; /* Netmask of interface */
-    union {
-        struct sockaddr *ifu_broadaddr;  /* Broadcast address of interface */
-        struct sockaddr *ifu_dstaddr;    /* Point-to-point destination address */
-    } ifa_ifu;
-    void            *ifa_data;    /* Address-specific data */
-};
-
-struct in_addr {
-    uint32_t s_addr;
-};
-
-enum {
-    IFF_UP          = 0x1,  /* interface is up              */
-    IFF_BROADCAST   = 0x2,  /* broadcast address valid      */
-    IFF_POINTOPOINT = 0x10  /* interface is has p-p link    */
-};
-
-enum {
-    AF_INET         = 2     /* Internet IP Protocol         */
-};
-
-const char *strerror(int errno);
-int getifaddrs(struct ifaddrs **ifap);
-void freeifaddrs(struct ifaddrs *ifa);
-const char *inet_ntop(int af, const void *src,
-                      char *dst, socklen_t size);
-]])
-
-if ffi.os == "Linux" then
+local stash = require('membership.stash')
+if not stash.get('network.cdef_getifaddrs') then
     ffi.cdef([[
-        struct sockaddr {
-            uint16_t         sa_family;   /* address family, AF_xxx   */
-            char             sa_data[14]; /* 14 bytes of protocol address */
+        struct ifaddrs {
+            struct ifaddrs  *ifa_next;    /* Next item in list */
+            char            *ifa_name;    /* Name of interface */
+            unsigned int     ifa_flags;   /* Flags from SIOCGIFFLAGS */
+            struct sockaddr *ifa_addr;    /* Address of interface */
+            struct sockaddr *ifa_netmask; /* Netmask of interface */
+            union {
+                struct sockaddr *ifu_broadaddr;  /* Broadcast address of interface */
+                struct sockaddr *ifu_dstaddr;    /* Point-to-point destination address */
+            } ifa_ifu;
+            void            *ifa_data;    /* Address-specific data */
         };
 
-        /* Structure describing an Internet (IP) socket address. */
-        struct sockaddr_in {
-            uint16_t         sin_family; /* Address family       */
-            uint16_t         sin_port;   /* Port number          */
-            struct in_addr   sin_addr;   /* Internet address     */
-        };
-    ]])
-elseif ffi.os == "OSX" then
-    ffi.cdef([[
-        struct sockaddr {
-            uint8_t          sa_len;
-            uint8_t          sa_family;   /* address family, AF_xxx   */
-            char             sa_data[14]; /* 14 bytes of protocol address */
+        struct in_addr {
+            uint32_t s_addr;
         };
 
-        /* Structure describing an Internet (IP) socket address. */
-        struct sockaddr_in {
-            uint8_t          sin_len;
-            uint8_t          sin_family; /* Address family       */
-            uint16_t         sin_port;   /* Port number          */
-            struct in_addr   sin_addr;   /* Internet address     */
+        enum {
+            IFF_UP          = 0x1,  /* interface is up              */
+            IFF_BROADCAST   = 0x2,  /* broadcast address valid      */
+            IFF_POINTOPOINT = 0x10  /* interface is has p-p link    */
         };
+
+        enum {
+            AF_INET         = 2     /* Internet IP Protocol         */
+        };
+
+        const char *strerror(int errno);
+        int getifaddrs(struct ifaddrs **ifap);
+        void freeifaddrs(struct ifaddrs *ifa);
+        const char *inet_ntop(int af, const void *src,
+                              char *dst, socklen_t size);
     ]])
+
+    if ffi.os == "Linux" then
+        ffi.cdef([[
+            struct sockaddr {
+                uint16_t         sa_family;   /* address family, AF_xxx   */
+                char             sa_data[14]; /* 14 bytes of protocol address */
+            };
+
+            /* Structure describing an Internet (IP) socket address. */
+            struct sockaddr_in {
+                uint16_t         sin_family; /* Address family       */
+                uint16_t         sin_port;   /* Port number          */
+                struct in_addr   sin_addr;   /* Internet address     */
+            };
+        ]])
+    elseif ffi.os == "OSX" then
+        ffi.cdef([[
+            struct sockaddr {
+                uint8_t          sa_len;
+                uint8_t          sa_family;   /* address family, AF_xxx   */
+                char             sa_data[14]; /* 14 bytes of protocol address */
+            };
+
+            /* Structure describing an Internet (IP) socket address. */
+            struct sockaddr_in {
+                uint8_t          sin_len;
+                uint8_t          sin_family; /* Address family       */
+                uint16_t         sin_port;   /* Port number          */
+                struct in_addr   sin_addr;   /* Internet address     */
+            };
+        ]])
+    end
+
+    stash.set('network.cdef_getifaddrs', true)
 end
+
 
 --- List active AF_INET interfaces.
 -- Compose a table of the following structure:

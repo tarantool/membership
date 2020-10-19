@@ -3,9 +3,10 @@ local checks = require('checks')
 local msgpack = require('msgpack')
 
 local opts = require('membership.options')
+local stash = require('membership.stash')
 
 local members = {}
-local _all_members = {
+local _all_members = table.copy(stash.get('members._all_members')) or {
     -- [uri] = {
     --     status = number,
     --     incarnation = number,
@@ -16,6 +17,10 @@ local _all_members = {
 
     -- uri is a string in format '<host>:<port>'
 }
+
+function members.after_reload()
+    stash.set('members._all_members', _all_members)
+end
 
 function members.clear()
     table.clear(_all_members)

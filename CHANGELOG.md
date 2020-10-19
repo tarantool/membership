@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- Allow reloading the code on the fly without status intervention.
+
 ### Fixed
 
 - Make subscriptions garbage-collectible. Previously, `fiber.cond`
