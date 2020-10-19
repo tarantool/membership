@@ -23,6 +23,7 @@ local _expired = {
 local _subscribers = {
     -- [fiber.cond] = true
 }
+setmetatable(_subscribers, {__mode = 'k'})
 
 function events.clear()
     _all_events = {}
