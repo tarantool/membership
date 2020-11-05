@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Make subscriptions garbage-collectible. Previously, `fiber.cond`
+  objects obtained from `membership.subscribe` should have been
+  unsubscribed manually, otherwise, they would never be GC'ed.
+  And now they are.
+
 ## [2.2.0] - 2019-10-22
 
 ### Added
