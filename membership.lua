@@ -17,28 +17,36 @@ local checks = require('checks')
 local socket = require('socket')
 local msgpack = require('msgpack')
 
+for _, m in ipairs({
+    'membership.stash',
+    'membership.events',
+    'membership.options',
+    'membership.members',
+    'membership.network',
+}) do
+    package.loaded[m] = nil
+end
+
 local opts = require('membership.options')
+local stash = require('membership.stash')
 local events = require('membership.events')
 local members = require('membership.members')
 local network = require('membership.network')
 
-local _sync_trigger = fiber.cond()
-local _ack_trigger = fiber.cond()
-local _ack_cache = {}
-local _resolve_cache = {}
+local _sync_trigger = stash.get('_sync_trigger') or fiber.cond()
+local _ack_trigger = stash.get('_ack_trigger') or fiber.cond()
+local _ack_cache = stash.get('_ack_cache') or {}
+local _resolve_cache = stash.get('_resolve_cache') or {}
 
-local _sock = nil
-local advertise_uri = nil
-
-local _handle_fiber = nil
-local _protocol_fiber = nil
-local _anti_entropy_fiber = nil
-
-local function fiber_cancel(f)
-    if f ~= nil and f:status() ~= 'dead' then
-        f:cancel()
-    end
+local function after_reload()
+    stash.set('_ack_cache', _ack_cache)
+    stash.set('_ack_trigger', _ack_trigger)
+    stash.set('_sync_trigger', _sync_trigger)
+    stash.set('_resolve_cache', _resolve_cache)
 end
+
+local _sock = stash.get('_sock')
+local advertise_uri = stash.get('advertise_uri')
 
 local function resolve(uri)
     checks('string')
@@ -345,7 +353,7 @@ local function handle_message(msg)
     return true
 end
 
-local function handle_message_step()
+local function _handle_message_step()
     local ok = _sock:readable(opts.PROTOCOL_PERIOD_SECONDS)
     if not ok then
         return
@@ -369,15 +377,12 @@ local function handle_message_step()
     end
 end
 
-local function handle_message_loop()
-    fiber.name('membership.handle')
-    while true do
-        local ok, res = xpcall(handle_message_step, debug.traceback)
-        fiber.testcancel()
+local function handle_message_step()
+    local ok, res = xpcall(_handle_message_step, debug.traceback)
+    fiber.testcancel()
 
-        if not ok then
-            log.error(res)
-        end
+    if not ok then
+        log.error(res)
     end
 end
 
@@ -389,6 +394,7 @@ local function wait_ack(uri, ts, timeout)
     local now
     local deadline = ts + timeout
     repeat
+        fiber.testcancel()
         now = fiber.time64()
 
         for _, ack in ipairs(_ack_cache) do
@@ -416,7 +422,7 @@ end
 
 local _protocol_round_list = {}
 local _protocol_round_iter = 1
-local function protocol_step()
+local function _protocol_step()
     local loop_now = fiber.time64()
 
     -- expire suspected members
@@ -429,7 +435,7 @@ local function protocol_step()
     end
 
     -- cleanup ack cache
-    _ack_cache = {}
+    table.clear(_ack_cache)
 
     -- prepare to send ping
     _protocol_round_iter = _protocol_round_iter + 1
@@ -498,27 +504,24 @@ local function protocol_step()
     end
 end
 
-local function protocol_loop()
-    fiber.name('membership.main')
-    while true do
-        local t1 = fiber.time()
-        local ok, res = xpcall(protocol_step, debug.traceback)
-        fiber.testcancel()
+local function protocol_step()
+    local t1 = fiber.clock()
+    local ok, res = xpcall(_protocol_step, debug.traceback)
+    fiber.testcancel()
 
-        if not ok then
-            log.error(res)
-        end
-
-        local t2 = fiber.time()
-        fiber.sleep(t1 + opts.PROTOCOL_PERIOD_SECONDS - t2)
+    if not ok then
+        log.error(res)
     end
+
+    local t2 = fiber.clock()
+    fiber.sleep(t1 + opts.PROTOCOL_PERIOD_SECONDS - t2)
 end
 
 --
 -- ANTI ENTROPY SYNC
 --
 
-local function anti_entropy_step()
+local function _anti_entropy_step()
     local alive_members = members.filter_excluding('unhealthy', opts.advertise_uri)
     local alive_cnt = #alive_members
     if alive_cnt == 0 then
@@ -530,21 +533,17 @@ local function anti_entropy_step()
     return _sync_trigger:wait(opts.PROTOCOL_PERIOD_SECONDS)
 end
 
-local function anti_entropy_loop()
-    fiber.name('membership.entropy')
+local function anti_entropy_step()
+    local ok, res = xpcall(_anti_entropy_step, debug.traceback)
+    fiber.testcancel()
 
-    while true do
-        local ok, res = xpcall(anti_entropy_step, debug.traceback)
-        fiber.testcancel()
-
-        if not ok then
-            log.error(res)
-            fiber.sleep(opts.PROTOCOL_PERIOD_SECONDS)
-        elseif not res then
-            fiber.sleep(opts.PROTOCOL_PERIOD_SECONDS)
-        else
-            fiber.sleep(opts.ANTI_ENTROPY_PERIOD_SECONDS)
-        end
+    if not ok then
+        log.error(res)
+        fiber.sleep(opts.PROTOCOL_PERIOD_SECONDS)
+    elseif not res then
+        fiber.sleep(opts.PROTOCOL_PERIOD_SECONDS)
+    else
+        fiber.sleep(opts.ANTI_ENTROPY_PERIOD_SECONDS)
     end
 end
 
@@ -598,12 +597,14 @@ local function init(advertise_host, port)
     })
     events.generate(advertise_uri, opts.ALIVE, 1, {})
 
-    fiber_cancel(_handle_fiber)
-    fiber_cancel(_protocol_fiber)
-    fiber_cancel(_anti_entropy_fiber)
-    _handle_fiber = fiber.new(handle_message_loop)
-    _protocol_fiber = fiber.new(protocol_loop)
-    _anti_entropy_fiber = fiber.new(anti_entropy_loop)
+    stash.fiber_cancel('protocol_step')
+    stash.fiber_cancel('anti_entropy_step')
+    stash.fiber_cancel('handle_message_step')
+    stash.fiber_new('protocol_step'):name('membership.main')
+    stash.fiber_new('anti_entropy_step'):name('membership.entropy')
+    stash.fiber_new('handle_message_step'):name('membership.handle')
+    stash.set('advertise_uri', advertise_uri)
+    stash.set('_sock', _sock)
 
     return true
 end
@@ -636,7 +637,7 @@ local function broadcast(port)
         local uri = addr.bcast or addr.inet4
         if uri then
             local uri = string.format('%s:%s', uri, port)
-        send_message(uri, 'PING', msg_data)
+            send_message(uri, 'PING', msg_data)
             log.info('Membership BROADCAST sent to %s', uri)
             bcast_sent = true
         end
@@ -662,12 +663,9 @@ local function leave()
     end
 
     -- First, we need to stop all fibers
-    fiber_cancel(_handle_fiber)
-    fiber_cancel(_protocol_fiber)
-    fiber_cancel(_anti_entropy_fiber)
-    _handle_fiber = nil
-    _protocol_fiber = nil
-    _anti_entropy_fiber = nil
+    stash.fiber_cancel('protocol_step')
+    stash.fiber_cancel('anti_entropy_step')
+    stash.fiber_cancel('handle_message_step')
 
     -- Perform artificial events.generate() and instantly send it
     local myself = members.get(advertise_uri)
@@ -688,6 +686,10 @@ local function leave()
 
     _sock:close()
     _sock = nil
+    stash.set('_sock', nil)
+
+    advertise_uri = nil
+    stash.set('advertise_uri', nil)
 
     members.clear()
     events.clear()
@@ -899,6 +901,16 @@ local function set_payload(key, value)
     return true
 end
 
+do -- finish module loading
+    opts.after_reload()
+    events.after_reload()
+    members.after_reload()
+    after_reload()
+    stash.set('protocol_step', protocol_step)
+    stash.set('anti_entropy_step', anti_entropy_step)
+    stash.set('handle_message_step', handle_message_step)
+end
+
 return {
     init = init,
     leave = leave,
@@ -924,7 +936,7 @@ return {
     --- Retrieve the encryption key that is currently in use.
     -- @function get_encryption_key
     -- @treturn string encryption key
-    get_encryption_key = opts.get_encryption_key,
+    get_encryption_key = assert(opts.get_encryption_key),
 
     --- Set the key used for low-level message encryption.
     -- The key is either trimmed or padded automatically to be exactly 32 bytes.
@@ -933,7 +945,7 @@ return {
     -- @function set_encryption_key
     -- @tparam string key encryption key
     -- @treturn nil
-    set_encryption_key = opts.set_encryption_key,
+    set_encryption_key = assert(opts.set_encryption_key),
 
 --- Subscription Functions.
 -- A subscription is implemented with Tarantool built-in
@@ -945,7 +957,7 @@ return {
     -- @function subscribe
     -- @return `fiber.cond` object which is
     -- broadcasted whenever the members table changes
-    subscribe = events.subscribe,
+    subscribe = assert(events.subscribe),
 
     --- Unsubscribe from membership updates.
     -- Remove subscription on `cond` object.
@@ -954,5 +966,5 @@ return {
     -- @function unsubscribe
     -- @param cond `fiber.cond` object obtained from `subscribe` function
     -- @treturn nil
-    unsubscribe = events.unsubscribe,
+    unsubscribe = assert(events.unsubscribe),
 }

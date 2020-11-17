@@ -41,3 +41,12 @@ timestamp: 1522427330993752
 clock_delta: 27810
 ...
 ```
+
+## Reloadability
+
+Membership module supports hot-reload:
+
+```lua
+package.loaded['membership'] = nil
+require('membership')
+```

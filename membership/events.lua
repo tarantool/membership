@@ -4,10 +4,11 @@ local checks = require('checks')
 local msgpack = require('msgpack')
 
 local opts = require('membership.options')
+local stash = require('membership.stash')
 local members = require('membership.members')
 
 local events = {}
-local _all_events = {
+local _all_events = table.copy(stash.get('events._all_events')) or {
     -- [uri] = {
     --     uri = string,
     --     status = number,
@@ -17,17 +18,23 @@ local _all_events = {
 
     -- uri is a string in format '<host>:<port>'
 }
-local _expired = {
+local _expired = table.copy(stash.get('events._expired')) or {
     -- [uri] = true
 }
-local _subscribers = {
+local _subscribers = table.copy(stash.get('events._subscribers')) or {
     -- [fiber.cond] = true
 }
 setmetatable(_subscribers, {__mode = 'k'})
 
+function events.after_reload()
+    stash.set('events._expired', _expired)
+    stash.set('events._all_events', _all_events)
+    stash.set('events._subscribers', _subscribers)
+end
+
 function events.clear()
-    _all_events = {}
-    _expired = {}
+    table.clear(_all_events)
+    table.clear(_expired)
 end
 
 function events.get(uri)
@@ -124,9 +131,17 @@ function events.handle(event)
 
     -- update members list
     if not member then
-        log.debug('Adding: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
+        log.debug(
+            'Adding: %s (inc. %d) is %s',
+            event.uri, event.incarnation,
+            opts.STATUS_NAMES[event.status]
+        )
     elseif member.status ~= event.status or member.incarnation ~= event.incarnation then
-        log.debug('Rumor: %s (inc. %d) is %s', event.uri, event.incarnation, opts.STATUS_NAMES[event.status])
+        log.debug(
+            'Rumor: %s (inc. %d) is %s',
+            event.uri, event.incarnation,
+            opts.STATUS_NAMES[event.status]
+        )
     end
     members.set(event.uri, event.status, event.incarnation, { payload = event.payload })
 

@@ -1,8 +1,18 @@
-#!/usr/bin/env tarantool
-
-local options = {}
 local log = require('log')
 local cbc = require('crypto').cipher.aes256.cbc
+
+local stash = require('membership.stash')
+
+local options = stash.get('options')
+if options == nil then
+    options = {}
+else
+    options = setmetatable(table.copy(options), nil)
+end
+
+function options.after_reload()
+    stash.set('options', options)
+end
 
 --- Tuning options for membership module.
 -- This module should normally never be used
@@ -51,7 +61,8 @@ options.NUM_FAILURE_DETECTION_SUBGROUPS = 3
 -- Default is 1472 (`Default-MTU (1500) - IP-Header (20) - UDP-Header (8)`)
 options.MAX_PACKET_SIZE = 1472
 
-options.ENCRYPTION_INIT = 'init-key-16-byte' -- !!KEEP string len SYNCED with cryptoapi
+--- Initialization vector for aes256 CBC encryption.
+options.ENCRYPTION_INIT = 'init-key-16-byte'
 
 function options.get_encryption_key()
     return options.encryption_key

@@ -97,7 +97,7 @@ class Server(object):
     def consume_lines(self):
         with self.process.stdout as pipe:
             for line in iter(pipe.readline, b''):
-                l = line.strip().decode('utf-8')  # noqa: E741
+                l = line.rstrip().decode('utf-8')  # noqa: E741
                 self.logger.warning(l)
                 if 'stack traceback:' in l:
                     self.seen_traceback = True
