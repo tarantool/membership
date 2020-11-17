@@ -1,7 +1,7 @@
 package = 'membership'
 version = 'scm-1'
 source  = {
-    url = 'git+ssh://git@gitlab.com:tarantool/membership.git',
+    url = 'git+https://github.com/tarantool/membership.git',
     branch = 'master',
 }
 dependencies = {
