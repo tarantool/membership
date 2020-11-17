@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.3.0] - 2020-11-17
+
 ### Added
 
 - Allow reloading the code on the fly without status intervention.
