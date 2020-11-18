@@ -14,13 +14,11 @@ def test_join(servers, helpers):
     helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'alive'])
 
 
-def test_dead(servers, helpers):
+def test_death(servers, helpers):
     servers[13302].kill()
     helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'suspect'])
     helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'dead'])
 
-
-def test_recover(servers, helpers):
     servers[13302].start()
     helpers.wait_for(servers[13302].connect)
     helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'alive'])
@@ -43,3 +41,19 @@ def test_reinit(servers, helpers):
     helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'dead'])
     helpers.wait_for(check_status, [servers[13302], '127.0.0.1:13301', 'dead'])
     helpers.wait_for(check_status, [servers[13302], '127.0.0.1:13303', 'alive'])
+
+    # Revert all changes
+    cmd = "return membership.init('localhost', 13301)"
+    assert servers[13301].conn.eval(cmd)[0]
+    helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'alive'])
+    helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'alive'])
+
+
+def test_error(servers, helpers):
+    cmd = "return membership.init('localhost', 13302)"
+    assert servers[13301].conn.eval(cmd)[0] == \
+        {'error': 'Socket bind error (13302/udp): Address already in use'}
+
+    assert servers[13301].probe_uri('localhost:13301') is True
+    assert servers[13301].probe_uri('localhost:13302') is True
+    assert servers[13302].probe_uri('localhost:13301') is True

@@ -577,9 +577,12 @@ local function init(advertise_host, port)
         local sock = socket('AF_INET', 'SOCK_DGRAM', 'udp')
         local ok = sock:bind('0.0.0.0', port)
         if not ok then
-            local err = string.format('Socket bind error: %s', _sock:error())
+            local err = string.format(
+                'Socket bind error (%s/udp): %s',
+                port, sock:error()
+            )
             log.error(err)
-            error(err)
+            error(err, 2)
         end
         sock:nonblock(true)
         sock:setsockopt('SOL_SOCKET', 'SO_BROADCAST', 1)
