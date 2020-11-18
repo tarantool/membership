@@ -7,11 +7,10 @@ then
 	exit 1
 fi
 
-echo TAG = \"$TAG\"
+echo "Preparing release \"$TAG\""
 mkdir -p release
 sed -e "s/branch = '.\+'/tag = '$TAG'/g" \
     -e "s/version = '.\+'/version = '$TAG-1'/g" \
-    -e "s/BUILD_DOC = '.\+'/BUILD_DOC = 'YES'/g" \
     membership-scm-1.rockspec > release/membership-$TAG-1.rockspec
 
 tarantoolctl rocks make release/membership-$TAG-1.rockspec

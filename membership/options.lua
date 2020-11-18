@@ -1,3 +1,8 @@
+--- Tuning options for membership module.
+-- This module should normally never be used
+--
+-- @submodule membership
+
 local log = require('log')
 local cbc = require('crypto').cipher.aes256.cbc
 
@@ -13,11 +18,6 @@ end
 function options.after_reload()
     stash.set('options', options)
 end
-
---- Tuning options for membership module.
--- This module should normally never be used
---
--- @submodule membership
 
 options.STATUS_NAMES = {'alive', 'suspect', 'dead', 'non-decryptable', 'left'}
 options.ALIVE = 1
