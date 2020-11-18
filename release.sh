@@ -1,10 +1,10 @@
 #!/bin/bash
 
-TAG=$(git describe --exact-match HEAD 2>/dev/null)
+TAG=$1
 if [ -z "$TAG" ]
 then
-	echo "Skipping release: no git tag found."
-	exit 0
+	echo "Usage: $0 <TAG>"
+	exit 1
 fi
 
 echo TAG = \"$TAG\"
