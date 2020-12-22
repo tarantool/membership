@@ -1,4 +1,6 @@
-[![pipeline status](https://gitlab.com/tarantool/membership/badges/master/pipeline.svg)](https://gitlab.com/tarantool/membership/commits/master)
+<a href="https://github.com/tarantool/membership/actions?query=workflow%3ATest">
+<img src="https://github.com/tarantool/membership/workflows/Test/badge.svg">
+</a>
 
 # Membership library for Tarantool based on a gossip protocol
 
