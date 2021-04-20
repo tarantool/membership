@@ -103,8 +103,9 @@ end
 
 local function send_message(uri, msg_type, msg_data)
     checks('string', 'string', 'table')
-    local addr = resolve(uri)
+    local addr, err = resolve(uri)
     if not addr then
+        log.warn("Resolve for " .. uri .. " error " .. err)
         return false
     end
 
@@ -208,8 +209,9 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     -- send to `uri` all local members that are not in `remote_tbl`
     -- well, not all actualy, but all that fits into UDP packet
     checks('string', 'string', 'table')
-    local addr = resolve(uri)
+    local addr, err = resolve(uri)
     if not addr then
+        log.warn("Resolve for " .. uri .. " error " .. err)
         return false
     end
 
@@ -681,8 +683,9 @@ local function leave()
     local msg_msgpacked = msgpack.encode({advertise_uri, 'LEAVE', msgpack.NULL, {event}})
     local msg_encrypted = opts.encrypt(msg_msgpacked)
     for _, uri in ipairs(members.filter_excluding('unhealthy', advertise_uri)) do
-        local addr = resolve(uri)
+        local addr, err = resolve(uri)
         if addr then
+            log.warn("Resolve for " .. uri .. " error " .. err)
             _sock:sendto(addr.host, addr.port, msg_encrypted)
         end
     end
