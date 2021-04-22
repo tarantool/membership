@@ -10,7 +10,12 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        tarantool: ['1.10', '2.4', '2.5', '2.6', '2.7']
+        tarantool:
+          - '1.10'
+          - '2.6'
+          - '2.7'
+          - '2.8'
+          - '2.9'
     runs-on: ${{ matrix.runs-on }}
     env:
       CMAKE_LDOC_FIND_REQUIRED: 'YES'
