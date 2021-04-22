@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import platform
 servers_list = [13301]
 
 
@@ -38,11 +39,17 @@ def test(servers, helpers):
             'getaddrinfo: Unknown error (unknown-host:9)',
             'getaddrinfo: Unknown error (-)'
         ]
-    else:
+    elif platform.system() == 'Linux':
         expected_warnings = [
             'getaddrinfo: Servname not supported for ai_socktype (unix/:/dev/null)',
             'getaddrinfo: Temporary failure in name resolution (unknown-host:9)',
             'getaddrinfo: Name or service not known (-)'
+        ]
+    else:
+        expected_warnings = [
+            'getaddrinfo: nodename nor servname provided, or not known (unix/:/dev/null)',
+            'getaddrinfo: nodename nor servname provided, or not known (unknown-host:9)',
+            'getaddrinfo: nodename nor servname provided, or not known (-)'
         ]
 
     assert servers[13301].conn.eval('return warnings')[0] == expected_warnings
