@@ -89,7 +89,7 @@ class Server(object):
         env['TARANTOOL_LISTEN'] = str(self.port)
 
         cmd = ["tarantool", os.path.join(script_dir, 'instance.lua')]
-        self.process = Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env, bufsize=1)
+        self.process = Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env)
         self.thread = Thread(
             target=self.consume_lines
         ).start()
