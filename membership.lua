@@ -51,15 +51,22 @@ local advertise_uri = stash.get('advertise_uri')
 local function resolve(uri)
     checks('string')
 
-    local member = members.get(uri)
-    local cached = _resolve_cache[uri]
-    if cached and member and member.status == opts.ALIVE then
-        return cached
+    if _resolve_cache[uri] then
+        local member = members.get(uri)
+        if member and member.status == opts.ALIVE then
+            return _resolve_cache[uri]
+        else
+            _resolve_cache[uri] = nil
+        end
     end
 
     local parts = uri_tools.parse(uri)
     if not parts then
-        return nil, 'parse error'
+        if _resolve_cache[uri] == nil then
+            _resolve_cache[uri] = false
+            log.warn("parse error (%s)", uri)
+        end
+        return nil
     end
 
     local addrinfo, err = socket.getaddrinfo(
@@ -67,7 +74,11 @@ local function resolve(uri)
         {family='AF_INET', type='SOCK_DGRAM'}
     )
     if addrinfo == nil then
-        return nil, err or 'getaddrinfo failed'
+        if _resolve_cache[uri] == nil then
+            _resolve_cache[uri] = false
+            log.warn("%s (%s)", err or 'getaddrinfo: Unknown error', uri)
+        end
+        return nil
     end
 
     _resolve_cache[uri] = addrinfo[1]
@@ -103,9 +114,8 @@ end
 
 local function send_message(uri, msg_type, msg_data)
     checks('string', 'string', 'table')
-    local addr, err = resolve(uri)
+    local addr = resolve(uri)
     if not addr then
-        log.warn("Resolve for " .. uri .. " error " .. err)
         return false
     end
 
@@ -209,9 +219,8 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
     -- send to `uri` all local members that are not in `remote_tbl`
     -- well, not all actualy, but all that fits into UDP packet
     checks('string', 'string', 'table')
-    local addr, err = resolve(uri)
+    local addr = resolve(uri)
     if not addr then
-        log.warn("Resolve for " .. uri .. " error " .. err)
         return false
     end
 
@@ -683,9 +692,8 @@ local function leave()
     local msg_msgpacked = msgpack.encode({advertise_uri, 'LEAVE', msgpack.NULL, {event}})
     local msg_encrypted = opts.encrypt(msg_msgpacked)
     for _, uri in ipairs(members.filter_excluding('unhealthy', advertise_uri)) do
-        local addr, err = resolve(uri)
+        local addr = resolve(uri)
         if addr then
-            log.warn("Resolve for " .. uri .. " error " .. err)
             _sock:sendto(addr.host, addr.port, msg_encrypted)
         end
     end
