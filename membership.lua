@@ -51,15 +51,22 @@ local advertise_uri = stash.get('advertise_uri')
 local function resolve(uri)
     checks('string')
 
-    local member = members.get(uri)
-    local cached = _resolve_cache[uri]
-    if cached and member and member.status == opts.ALIVE then
-        return cached
+    if _resolve_cache[uri] then
+        local member = members.get(uri)
+        if member and member.status == opts.ALIVE then
+            return _resolve_cache[uri]
+        else
+            _resolve_cache[uri] = nil
+        end
     end
 
     local parts = uri_tools.parse(uri)
     if not parts then
-        return nil, 'parse error'
+        if _resolve_cache[uri] == nil then
+            _resolve_cache[uri] = false
+            log.warn("parse error (%s)", uri)
+        end
+        return nil
     end
 
     local addrinfo, err = socket.getaddrinfo(
@@ -67,7 +74,11 @@ local function resolve(uri)
         {family='AF_INET', type='SOCK_DGRAM'}
     )
     if addrinfo == nil then
-        return nil, err or 'getaddrinfo failed'
+        if _resolve_cache[uri] == nil then
+            _resolve_cache[uri] = false
+            log.warn("%s (%s)", err or 'getaddrinfo: Unknown error', uri)
+        end
+        return nil
     end
 
     _resolve_cache[uri] = addrinfo[1]
