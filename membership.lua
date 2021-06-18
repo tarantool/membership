@@ -508,8 +508,14 @@ local function _protocol_step()
         members.set(uri, member.status, member.incarnation, { clock_delta = delta })
         return
     elseif members.get(uri).status == opts.ALIVE then
-        log.info('Could not reach node: %s - %s', uri, opts.STATUS_NAMES[opts.SUSPECT])
-        events.generate(uri, opts.SUSPECT)
+        if opts.SUSPICIOUSNESS == false then
+            log.debug('Could not reach node: %s (ignored)', uri)
+        else
+            log.info('Could not reach node: %s - %s', uri,
+                opts.STATUS_NAMES[opts.SUSPECT]
+            )
+            events.generate(uri, opts.SUSPECT)
+        end
         return
     end
 end

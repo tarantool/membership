@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- New option `SUSPICIOUSNESS` (default: `true`) allows to
+  disable generation of rumors about suspected members.
+
 ### Fixed
 
 - Uncaught exception which prevented discovering

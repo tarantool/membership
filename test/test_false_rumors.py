@@ -70,3 +70,20 @@ def test_flickering(servers, helpers):
         'localhost:13302': 'suspect',
         'localhost:13303': 'suspect',
     }])
+
+
+def test_nonsuspiciousness(servers, helpers):
+    # With disabled suspiciousness it stops flickering again
+
+    servers[13301].conn.eval('''
+        local opts = require('membership.options')
+        opts.SUSPICIOUSNESS = false
+    ''')
+
+    helpers.wait_for(servers[13301].check_status, ['localhost:13301', 'alive'])
+    helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
+    helpers.wait_for(servers[13301].check_status, ['localhost:13303', 'alive'])
+    servers[13301].conn.eval("table.clear(rumors)")
+
+    time.sleep(2)
+    check_rumors(servers[13301], {})
