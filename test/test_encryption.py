@@ -70,3 +70,19 @@ def test_disable_encryption(servers, helpers):
         'return membership.get_encryption_key()')[0] is None
     helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'alive'])
     helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'alive'])
+
+
+def test_gh36(servers, helpers):
+    # There was a bug in nslookup function which prevented
+    # discovering non-decryptable members
+    for i in range(1, 10):
+        # Flood resolve_cache with non-resolvable uris
+        uri = 's%03d:oO' % i
+        servers[13302].conn.eval('membership.probe_uri("%s")' % uri)
+
+    servers[13301].conn.eval('return membership.set_encryption_key("ZZ")')
+    assert servers[13301].conn.eval(
+        'return membership.get_encryption_key()')[0] == \
+        "                              ZZ"
+    helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'non-decryptable'])
+    helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'non-decryptable'])

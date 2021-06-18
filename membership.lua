@@ -89,7 +89,10 @@ local function nslookup(host, port)
     checks('string', 'number')
 
     for uri, cache in pairs(_resolve_cache) do
-        if (cache.host == host) and (cache.port == port) then
+        if cache
+        and cache.host == host
+        and cache.port == port
+        then
             return uri
         end
     end
