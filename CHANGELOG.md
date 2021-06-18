@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Avoid event duplication due to a bug.
 
+- Properly handle the internal option `NUM_FAILURE_DETECTION_SUBGROUPS`
+  which controls the number of indirect pings.
+
 ## [2.3.2] - 2021-04-22
 
 ### Fixed

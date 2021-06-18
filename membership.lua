@@ -112,7 +112,7 @@ local function random_permutation(tbl)
 end
 
 --
--- SEND FUNCTIONS
+-- MESSAGE SENDING
 --
 
 local function send_message(uri, msg_type, msg_data)
@@ -257,7 +257,7 @@ local function send_anti_entropy(uri, msg_type, remote_tbl)
 end
 
 --
--- RECEIVE FUNCTIONS
+-- MESSAGE RECEIVING
 --
 
 local function handle_message(msg)
@@ -488,12 +488,12 @@ local function _protocol_step()
         members.filter_excluding('unhealthy', advertise_uri, uri)
     )
     for _, through_uri in ipairs(through_uri_list) do
-        if send_message(through_uri, 'PING', msg_data) then
-            sent_indirect = sent_indirect + 1
-        end
-
         if sent_indirect >= opts.NUM_FAILURE_DETECTION_SUBGROUPS then
             break
+        end
+
+        if send_message(through_uri, 'PING', msg_data) then
+            sent_indirect = sent_indirect + 1
         end
     end
 
