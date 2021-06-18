@@ -126,41 +126,37 @@ local function send_message(uri, msg_type, msg_data)
     local msg_raw = {advertise_uri, msg_type, msg_data, events_to_send}
     local msg_size = #msgpack.encode(msg_raw)
 
-    if members.get(uri) then
-        local extra_event = events.get(uri)
-        if extra_event == nil then
-            local member = members.get(uri)
-            extra_event = {
-                uri = uri,
-                status = member.status,
-                incarnation = member.incarnation,
-                ttl = 1,
-            }
-        end
-
+    -- Always tell the recipient what current instance thinks about it.
+    -- It's necessary to refute rumors faster.
+    local member = members.get(uri)
+    if member then
+        local extra_event = events.get(uri) or {
+            uri = uri,
+            status = member.status,
+            incarnation = member.incarnation,
+            ttl = 1,
+        }
         table.insert(events_to_send, events.pack(extra_event))
         msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
         events_to_send[uri] = true
     end
 
-    local extra_event = events.get(advertise_uri)
-    if extra_event == nil and not events_to_send[advertise_uri] then
+    -- And always tell about myself to speed up payload dissemination.
+    if not events_to_send[advertise_uri] then
         local myself = members.get(advertise_uri)
-        extra_event = {
+        local extra_event = events.get(advertise_uri) or {
             uri = advertise_uri,
-            status = opts.ALIVE,
+            status = myself.status,
             incarnation = myself.incarnation,
             payload = myself.payload,
             ttl = 1,
         }
-    end
-    if extra_event ~= nil then
         table.insert(events_to_send, events.pack(extra_event))
         msg_size = msg_size + events.estimate_msgpacked_size(extra_event)
         events_to_send[advertise_uri] = true
     end
 
-    for _, event in events.pairs() do
+    for uri, event in events.pairs() do
         if not events_to_send[uri] then
             local evt_size = events.estimate_msgpacked_size(event)
             if #events_to_send+1 == 16 then
@@ -171,7 +167,7 @@ local function send_message(uri, msg_type, msg_data)
                 break
             else
                 table.insert(events_to_send, events.pack(event))
-                events_to_send[event.uri] = true
+                events_to_send[uri] = true
                 msg_size = msg_size + evt_size
             end
         end
@@ -198,7 +194,7 @@ local function send_message(uri, msg_type, msg_data)
                 break
             else
                 table.insert(events_to_send, events.pack(event))
-                events_to_send[event.uri] = true
+                events_to_send[member_uri] = true
                 msg_size = msg_size + evt_size
             end
         end

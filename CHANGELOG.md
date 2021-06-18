@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Uncaught exception which prevented discovering
   non-decryptable members.
 
+- Avoid event duplication due to a bug.
+
 ## [2.3.2] - 2021-04-22
 
 ### Fixed
