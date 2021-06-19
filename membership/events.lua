@@ -1,4 +1,3 @@
-local log = require('log')
 local fiber = require('fiber')
 local checks = require('checks')
 local msgpack = require('msgpack')
@@ -131,13 +130,13 @@ function events.handle(event)
 
     -- update members list
     if not member then
-        log.debug(
+        opts.log_debug(
             'Adding: %s (inc. %d) is %s',
             event.uri, event.incarnation,
             opts.STATUS_NAMES[event.status]
         )
     elseif member.status ~= event.status or member.incarnation ~= event.incarnation then
-        log.debug(
+        opts.log_debug(
             'Rumor: %s (inc. %d) is %s',
             event.uri, event.incarnation,
             opts.STATUS_NAMES[event.status]
