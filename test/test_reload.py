@@ -67,15 +67,11 @@ def test_reload_fast(servers, helpers):
     assert servers[13301].conn.eval('return _G.cond:wait(1)')[0]
     assert servers[13301].members()['localhost:13302']['payload'] == {'k': 'v2'}
 
-    def check_status(srv, uri, status):
-        member = srv.members()[uri]
-        assert member['status'] == status
-
     servers[13302].conn.eval('return membership.set_encryption_key("YY")')
     assert servers[13302].conn.eval('return package.reload()') == [True]
-    helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'non-decryptable'])
-    helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'non-decryptable'])
+    helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'non-decryptable'])
+    helpers.wait_for(servers[13302].check_status, ['localhost:13301', 'non-decryptable'])
 
     servers[13301].conn.eval('return membership.set_encryption_key("YY")')
-    helpers.wait_for(check_status, [servers[13301], 'localhost:13302', 'alive'])
-    helpers.wait_for(check_status, [servers[13302], 'localhost:13301', 'alive'])
+    helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
+    helpers.wait_for(servers[13302].check_status, ['localhost:13301', 'alive'])

@@ -146,6 +146,10 @@ class Server(object):
         cmd = "return membership.myself()"
         return self.conn.eval(cmd)[0]
 
+    def check_status(self, uri, status):
+        cmd = "return membership.get_member('{}')".format(uri)
+        assert self.conn.eval(cmd)[0]['status'] == status
+
 
 @pytest.fixture(scope="module")
 def servers(request, helpers):
