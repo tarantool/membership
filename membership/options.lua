@@ -45,6 +45,13 @@ options.ACK_TIMEOUT_SECONDS = 0.200
 -- Default is 10
 options.ANTI_ENTROPY_PERIOD_SECONDS = 10.0
 
+--- Toggle producing `suspect` rumors when ping fails. Even if disabled,
+-- it doesn't affect neither gossip dissemination nor other statuses
+-- generation (e.g. `dead` and `non-decryptable`).
+--
+-- Default is `true`
+options.SUSPICIOUSNESS = true
+
 --- Timeout to mark `suspect` members as `dead`.
 --
 -- Default is 3
