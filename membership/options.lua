@@ -71,6 +71,9 @@ options.MAX_PACKET_SIZE = 1472
 --- Initialization vector for aes256 CBC encryption.
 options.ENCRYPTION_INIT = 'init-key-16-byte'
 
+
+options.log_debug = log.debug
+
 function options.get_encryption_key()
     return options.encryption_key
 end

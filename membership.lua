@@ -509,7 +509,7 @@ local function _protocol_step()
         return
     elseif members.get(uri).status == opts.ALIVE then
         if opts.SUSPICIOUSNESS == false then
-            log.debug('Could not reach node: %s (ignored)', uri)
+            opts.log_debug('Could not reach node: %s (ignored)', uri)
         else
             log.info('Could not reach node: %s - %s', uri,
                 opts.STATUS_NAMES[opts.SUSPECT]
