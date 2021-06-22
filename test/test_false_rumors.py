@@ -55,3 +55,18 @@ def test_indirect_ping(servers, helpers):
 
     time.sleep(2)
     check_rumors(servers[13301], {})
+
+
+def test_flickering(servers, helpers):
+    # Cluster starts flickering if indirect pings are disabled
+
+    servers[13301].conn.eval('''
+        local opts = require('membership.options')
+        opts.NUM_FAILURE_DETECTION_SUBGROUPS = 0
+    ''')
+
+    helpers.wait_for(check_rumors, [servers[13301], {
+        'localhost:13301': 'suspect',
+        'localhost:13302': 'suspect',
+        'localhost:13303': 'suspect',
+    }])
