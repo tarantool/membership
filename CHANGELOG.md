@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 
 - New option `SUSPICIOUSNESS` (default: `true`) allows to
-  disable generation of rumors about suspected members.
+  disable generation of rumors about suspected members. Also,
+  membership won't produce any rumors unless myself is alive.
 
 - New option `log_debug` which can be easily overridden to
   control the verbosity level.
