@@ -8,7 +8,7 @@ servers_list = [13301]
 def test(servers, helpers):
     assert servers[13301].conn.eval('''
         warnings = { }
-        package.loaded.log.warn = function(...)
+        require('log').warn = function(...)
             table.insert(warnings, string.format(...))
         end
         return true
