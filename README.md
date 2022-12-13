@@ -52,3 +52,46 @@ Membership module supports hot-reload:
 package.loaded['membership'] = nil
 require('membership')
 ```
+
+## Changing options
+
+You can change membership options directly by using:
+
+```lua
+require("membership.options")[opt_name] = opt_value
+```
+
+Available options:
+* Period of sending direct PINGs.
+  `PROTOCOL_PERIOD_SECONDS`, default: 1.0
+
+* Time to wait for ACK message after PING.
+  If a member does not reply within this time,
+  the indirect ping algorithm is invoked.
+  `ACK_TIMEOUT_SECONDS`, default: 0.2
+
+* Period to perform anti-entropy sync.
+  `ANTI_ENTROPY_PERIOD_SECONDS`, default: 10
+
+* Toggle producing `suspect` rumors when ping fails. Even if disabled,
+  it doesn't affect neither gossip dissemination nor other statuses
+  generation (e.g. `dead` and `non-decryptable`).
+  `SUSPICIOUSNESS`, default: true
+
+* Timeout to mark `suspect` members as `dead`.
+  `SUSPECT_TIMEOUT_SECONDS`, default: 3
+
+* Number of members to try indirectly pinging a `suspect`.
+  Denoted as `k` in [SWIM paper](swim-paper.pdf).
+  `NUM_FAILURE_DETECTION_SUBGROUPS`, default: 3
+
+* Maximum size of UPD packets to send.
+  `MAX_PACKET_SIZE`, default: 1472 (`Default-MTU (1500) - IP-Header (20) - UDP-Header (8)`)
+
+## Payload
+
+You can add payload to any member by calling:
+
+```lua
+membership.set_payload(key, value)
+```
