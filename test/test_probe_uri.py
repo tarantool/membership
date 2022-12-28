@@ -39,6 +39,12 @@ def test(servers, helpers):
             'getaddrinfo: Unknown error (unknown-host:9)',
             'getaddrinfo: Unknown error (-)'
         ]
+    elif (major == 2 and minor == 10):
+        expected_warnings = [
+            'getaddrinfo: Servname not supported for ai_socktype: Input/output error (unix/:/dev/null)',
+            'getaddrinfo: Temporary failure in name resolution: Input/output error (unknown-host:9)',
+            'getaddrinfo: Name or service not known: Input/output error (-)'
+        ]
     elif platform.system() == 'Linux':
         expected_warnings = [
             'getaddrinfo: Servname not supported for ai_socktype (unix/:/dev/null)',

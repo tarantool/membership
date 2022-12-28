@@ -15,22 +15,22 @@ jobs:
           - '2.6'
           - '2.7'
           - '2.8'
-          - '2.9'
+          - '2.10'
     runs-on: ${{ matrix.runs-on }}
     env:
       CMAKE_LDOC_FIND_REQUIRED: 'YES'
     steps:
-      - uses: actions/checkout@master
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
-          python-version: 3.8
-      - uses: rosik/setup-tarantool@v1
+          python-version: "3.8.14"
+      - uses: tarantool/setup-tarantool@v2
         with:
           tarantool-version: ${{ matrix.tarantool }}
 
       # Setup python packages
       - name: Cache pip packages
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: cache-venv
         with:
           path: ./venv
@@ -44,7 +44,7 @@ jobs:
 
       # Setup luacheck and ldoc
       - name: Cache rocks
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: cache-rocks
         with:
           path: .rocks/
