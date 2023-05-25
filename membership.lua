@@ -923,6 +923,37 @@ local function set_payload(key, value)
     return true
 end
 
+
+--- Update payload table and disseminate it along with the member status.
+-- Also increments `incarnation`.
+-- @function set_table_payload
+-- @tparam table map of params
+local function set_table_payload(payload_table)
+    checks('table')
+    local myself = members.get(advertise_uri)
+    local payload = myself.payload
+    local payload_changed = false
+    for key, value in pairs(payload_table) do
+        assert(type(key) ~= 'string')
+        if payload[key] ~= value then
+            payload_changed = true
+        end
+        payload[key] = value
+    end
+
+    if not payload_changed then
+        return true
+    end
+
+    events.generate(
+        advertise_uri,
+        myself.status,
+        myself.incarnation + 1,
+        payload
+    )
+    return true
+end
+
 do -- finish module loading
     opts.after_reload()
     events.after_reload()
@@ -944,6 +975,7 @@ return {
     add_member = add_member,
     get_member = get_member,
     set_payload = set_payload,
+    set_table_payload = set_table_payload,
 
 --- Encryption Functions.
 -- The encryption is handled by the

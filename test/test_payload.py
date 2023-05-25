@@ -39,3 +39,13 @@ def test(servers, helpers):
             'foo2': 42
         }
     ])
+
+    assert servers[13301].conn.eval('return membership.set_table_payload{foo1 = 42, foo2 = 43}')[0]
+    helpers.wait_for(check_payload, [
+        servers[13302],
+        'localhost:13301',
+        {
+            'foo1': 42,
+            'foo2': 43,
+        }
+    ])

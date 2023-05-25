@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- New method `add_table_payload` to add several values to payload.
+
 ## [2.4.0] - 2021-07-12
 
 ### Added
