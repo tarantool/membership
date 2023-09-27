@@ -364,11 +364,17 @@ local function handle_message(msg)
 end
 
 local function _handle_message_step()
+    if _sock == nil then
+        return
+    end
     local ok = _sock:readable(opts.PROTOCOL_PERIOD_SECONDS)
     if not ok then
         return
     end
 
+    if _sock == nil then
+        return false
+    end
     local msg, from = _sock:recvfrom(opts.MAX_PACKET_SIZE)
     local ok = handle_message(msg)
 
