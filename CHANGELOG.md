@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.4.1] - 2023-09-28
 ### Fixed
 
 - Log overflow when inner fibers weren't canceled.
