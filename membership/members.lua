@@ -117,4 +117,13 @@ function members.count()
     return count
 end
 
+function members.remove(uri)
+    checks('string')
+
+    _all_members[uri] = nil
+    local stash = rawget(_G, '__membership_stash')
+    stash['members._all_members'][uri] = nil
+    stash['_resolve_cache'][uri] = nil
+end
+
 return members
