@@ -69,9 +69,10 @@ local function resolve(uri)
         return nil
     end
 
+    local family = parts.ipv6 and 'AF_INET6' or 'AF_INET'
     local addrinfo, err = socket.getaddrinfo(
         parts.host, parts.service,
-        {family='AF_INET', type='SOCK_DGRAM'}
+        {family=family, type='SOCK_DGRAM'}
     )
     if addrinfo == nil then
         if _resolve_cache[uri] == nil then
@@ -598,9 +599,12 @@ end
 local function init(advertise_host, port)
     checks('string', 'number')
 
+    local parts = uri_tools.parse(advertise_host)
     if _sock == nil or _sock:name().port ~= port then
-        local sock = socket('AF_INET', 'SOCK_DGRAM', 'udp')
-        local ok = sock:bind('0.0.0.0', port)
+        local family = parts.ipv6 and 'AF_INET6' or 'AF_INET'
+        local addr = parts.ipv6 and '::' or '0.0.0.0'
+        local sock = socket(family, 'SOCK_DGRAM', 'udp')
+        local ok = sock:bind(addr, port)
         if not ok then
             local err = string.format(
                 'Socket bind error (%s/udp): %s',
@@ -839,6 +843,10 @@ local function add_member(uri)
         return nil, 'parse error'
     end
 
+    if parts.ipv6 then
+        parts.host = '[' .. parts.host .. ']'
+    end
+
     local uri = uri_tools.format({host = parts.host, service = parts.service})
     local member = members.get(uri)
     local incarnation = nil
@@ -876,6 +884,10 @@ local function probe_uri(uri)
     local parts = uri_tools.parse(uri)
     if not parts then
         return nil, 'parse error'
+    end
+
+    if parts.ipv6 then
+        parts.host = '[' .. parts.host .. ']'
     end
 
     local uri = uri_tools.format({host = parts.host, service = parts.service})
