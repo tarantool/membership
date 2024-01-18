@@ -479,13 +479,17 @@ local function _protocol_step()
         local ack_data = wait_ack(uri, loop_now, opts.ACK_TIMEOUT_SECONDS * 1.0e6)
         if ack_data ~= nil then
             local member = members.get(uri)
+            if member == nil then
+                return
+            end
             -- calculate time difference between local time and member time
             local delta = _get_clock_delta(ack_data)
             members.set(uri, member.status, member.incarnation, { clock_delta = delta }) -- update timstamp
             return
         end
     end
-    if members.get(uri).status >= opts.DEAD then
+    local member = members.get(uri)
+    if member ~= nil and member.status >= opts.DEAD then
         -- still dead, do nothing
         return
     end
@@ -510,6 +514,9 @@ local function _protocol_step()
     end
     if sent_indirect > 0 and ack_data ~= nil then
         local member = members.get(uri)
+        if member == nil then
+            return
+        end
         -- calculate time difference between local time and member time
         local delta = _get_clock_delta(ack_data)
         members.set(uri, member.status, member.incarnation, { clock_delta = delta })
@@ -941,6 +948,19 @@ local function set_payload(key, value)
     return true
 end
 
+--- Remove a member. Don't use it unless you having a trouble with stale members.
+-- @function remove_member
+-- @tparam uri string
+local function remove_member(uri)
+    checks('string')
+    local member = members.get(uri)
+    if member == nil then
+        return
+    end
+
+    members.remove(uri)
+end
+
 do -- finish module loading
     opts.after_reload()
     events.after_reload()
@@ -961,6 +981,7 @@ return {
     probe_uri = probe_uri,
     add_member = add_member,
     get_member = get_member,
+    remove_member = remove_member,
     set_payload = set_payload,
 
 --- Encryption Functions.
