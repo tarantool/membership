@@ -55,10 +55,16 @@ end
 
 function members.unpack(member)
     checks('table')
+    local payload = member[3]
+    if payload == msgpack.NULL
+    or type(payload) ~= 'table'
+    then
+        payload = nil
+    end
     return member[1], {
-        status = member[2],
-        incarnation = member[3],
-        payload = (member[4] ~= msgpack.NULL) and member[4] or nil,
+        status = tonumber(member[2]),
+        incarnation = tonumber(member[3]),
+        payload = payload,
     }
 end
 

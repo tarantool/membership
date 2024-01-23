@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Invalid payload parsing when the message is broken.
+
 ## [2.4.2] - 2024-01-18
 
 ### Added

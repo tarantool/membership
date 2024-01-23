@@ -4,9 +4,9 @@
 servers_list = [13301, 13302]
 
 
-def check_payload(srv, uri, payload):
+def check_payload(srv, uri, payload, status='alive'):
     member = srv.members()[uri]
-    assert member['status'] == 'alive'
+    assert member['status'] == status
     assert member['payload'] == payload
 
 
@@ -38,4 +38,19 @@ def test(servers, helpers):
         {
             'foo2': 42
         }
+    ])
+
+    assert servers[13301].conn.eval('''
+        _G.checks_disabled = true
+        local opts = require('membership.options')
+        require('membership.events').generate('13301', opts.DEAD, 31, 37)
+        _G.checks_disabled = false
+
+        return true
+    ''')[0]
+    helpers.wait_for(check_payload, [
+        servers[13302],
+        '13301',
+        [],
+        'dead',
     ])

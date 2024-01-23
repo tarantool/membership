@@ -84,11 +84,17 @@ end
 
 function events.unpack(event)
     checks('table')
+    local payload = event[4]
+    if payload == msgpack.NULL
+    or type(payload) ~= 'table'
+    then
+        payload = nil
+    end
     return {
-        uri = event[1],
-        status = event[2],
-        incarnation = event[3],
-        payload = (event[4] ~= msgpack.NULL) and event[4] or nil,
+        uri = tostring(event[1]),
+        status = tonumber(event[2]),
+        incarnation = tonumber(event[3]),
+        payload = payload,
         ttl = event[5],
     }
 end

@@ -60,7 +60,7 @@ def test_discover_kill(servers, helpers):
     t1 = time.time()
 
     def check_public_opinion():
-        """ Cheack that all members consider URI has given STATUS """
+        """ Check that all members consider URI has given STATUS """
 
         for port, srv in list(servers_copy.items()):
             member = srv.get_member(uri)

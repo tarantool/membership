@@ -4,6 +4,15 @@ require('strict').on()
 local log = require('log')
 local fiber = require('fiber')
 local console = require('console')
+
+local checks = require('checks')
+package.loaded['checks'] = function(...)
+    if rawget(_G, "checks_disabled") == true then
+        return
+    end
+    return checks(...)
+end
+
 local membership = require('membership')
 _G.membership = membership
 
