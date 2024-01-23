@@ -16,6 +16,7 @@ jobs:
           - '2.7'
           - '2.8'
           - '2.10'
+          - '2.11'
     runs-on: ${{ matrix.runs-on }}
     env:
       CMAKE_LDOC_FIND_REQUIRED: 'YES'
