@@ -779,10 +779,17 @@ local function _member_pack(uri, member)
         return nil
     end
 
+    local payload = member.payload
+    if payload == msgpack.NULL
+    or type(payload) ~= 'table'
+    then
+        payload = {}
+    end
+
     return {
         uri = uri,
         status = opts.STATUS_NAMES[member.status] or tostring(member.status),
-        payload = member.payload or {},
+        payload = payload,
         incarnation = member.incarnation,
         timestamp = member.timestamp,
         clock_delta = member.clock_delta,
@@ -934,6 +941,9 @@ local function set_payload(key, value)
     checks('string', '?')
     local myself = members.get(advertise_uri)
     local payload = myself.payload
+    if type(payload) ~= 'table' then
+        payload = {}
+    end
     if payload[key] == value then
         return true
     end
