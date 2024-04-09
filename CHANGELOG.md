@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.4.4] - 2024-04-09
 ### Fixed
 
  - Invalid payload parsing in anti entropy step.
