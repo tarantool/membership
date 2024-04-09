@@ -55,7 +55,7 @@ end
 
 function members.unpack(member)
     checks('table')
-    local payload = member[3]
+    local payload = member[4]
     if payload == msgpack.NULL
     or type(payload) ~= 'table'
     then
