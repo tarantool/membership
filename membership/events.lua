@@ -92,10 +92,10 @@ function events.unpack(event)
     end
     return {
         uri = tostring(event[1]),
-        status = tonumber(event[2]),
-        incarnation = tonumber(event[3]),
+        status = tonumber(event[2]) or opts.DEAD,
+        incarnation = tonumber(event[3]) or 1,
         payload = payload,
-        ttl = event[5],
+        ttl = tonumber(event[5]) or 0,
     }
 end
 
