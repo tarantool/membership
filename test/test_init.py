@@ -29,6 +29,8 @@ def test_mark_left(servers, helpers):
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'left'])
 
     servers[13302].start()
+    assert servers[13301].conn.eval("return membership.init('localhost', 13302)")[0]
+
     helpers.wait_for(servers[13302].connect)
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
     helpers.wait_for(servers[13302].check_status, ['localhost:13301', 'alive'])
