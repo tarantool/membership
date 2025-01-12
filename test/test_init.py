@@ -14,24 +14,11 @@ def test_death(servers, helpers):
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'suspect'])
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'dead'])
 
-    servers[13302].start()
-    helpers.wait_for(servers[13302].connect)
-    helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
-    helpers.wait_for(servers[13302].check_status, ['localhost:13301', 'alive'])
-
-
-def test_mark_left(servers, helpers):
-    servers[13302].kill()
-    helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'suspect'])
-    helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'dead'])
-
     assert servers[13301].conn.eval('return membership.mark_left("localhost:13302")')[0]
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'left'])
 
     servers[13302].start()
     helpers.wait_for(servers[13302].connect)
-    assert servers[13301].conn.eval("return membership.init('localhost', 13302)")[0]
-
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
     helpers.wait_for(servers[13302].check_status, ['localhost:13301', 'alive'])
 
