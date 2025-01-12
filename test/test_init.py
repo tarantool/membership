@@ -19,6 +19,7 @@ def test_death(servers, helpers):
 
     servers[13302].start()
     helpers.wait_for(servers[13302].connect)
+    assert servers[13301].conn.eval("return membership.init('localhost', 13302)")[0]
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
     helpers.wait_for(servers[13302].check_status, ['localhost:13301', 'alive'])
 
