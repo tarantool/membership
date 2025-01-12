@@ -22,5 +22,6 @@ def test_rejoin(servers, helpers):
 
 
 def test_mark_left(servers, helpers):
+    helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
     assert servers[13301].conn.eval('return membership.mark_left("localhost:13302")')[0]
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'left'])
