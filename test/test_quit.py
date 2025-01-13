@@ -25,3 +25,9 @@ def test_mark_left(servers, helpers):
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'alive'])
     assert servers[13301].conn.eval('return membership.mark_left("localhost:13302")')[0]
     helpers.wait_for(servers[13301].check_status, ['localhost:13302', 'left'])
+
+    # already has left
+    assert not servers[13301].conn.eval('return membership.mark_left("localhost:13302")')[0]
+
+    # there are no such member
+    assert not servers[13301].conn.eval('return membership.mark_left("localhost:10000")')[0]

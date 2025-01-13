@@ -748,7 +748,7 @@ local function mark_left(uri_to_leave)
 
     -- Perform artificial events.generate() and instantly send it
     local myself = members.get(uri_to_leave)
-    if not myself then
+    if not myself or myself.status == opts.LEFT then
         return false
     end
     local event = events.pack({
