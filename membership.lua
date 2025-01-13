@@ -736,6 +736,39 @@ local function leave()
     return true
 end
 
+--- Forcefully send leave message about an instance.
+-- @function mark_left
+-- @treturn boolean
+--  `true` if call succeeds,
+--  `false` if member has already left.
+local function mark_left(uri_to_leave)
+    if _sock == nil then
+        return false
+    end
+
+    -- Perform artificial events.generate() and instantly send it
+    local myself = members.get(uri_to_leave)
+    if not myself or myself.status == opts.LEFT then
+        return false
+    end
+    local event = events.pack({
+        uri = uri_to_leave,
+        status = opts.LEFT,
+        incarnation = myself.incarnation,
+        ttl = members.count(),
+    })
+    local msg_msgpacked = msgpack.encode({uri_to_leave, 'LEAVE', msgpack.NULL, {event}})
+    local msg_encrypted = opts.encrypt(msg_msgpacked)
+    for _, uri in ipairs(members.filter_excluding('unhealthy', uri_to_leave)) do
+        local addr = resolve(uri)
+        if addr then
+            _sock:sendto(addr.host, addr.port, msg_encrypted)
+        end
+    end
+
+    return true
+end
+
 --- Member data structure.
 -- A member is represented by the table with the following fields:
 --
@@ -984,6 +1017,7 @@ end
 return {
     init = init,
     leave = leave,
+    mark_left = mark_left,
     members = get_members,
     broadcast = broadcast,
     pairs = function() return pairs(get_members()) end,
