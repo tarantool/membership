@@ -84,10 +84,17 @@ function members.filter_excluding(state, uri1, uri2)
     return ret
 end
 
-function members.set(uri, status, incarnation, params)
-    checks('string', 'number', 'number', { payload = '?table', clock_delta = '?number' })
+function members.set(uri, status, incarnation, params, set_opts)
+    checks('string', 'number', 'number',
+        { payload = '?table', clock_delta = '?number', },
+        { forbid_new = '?boolean', }
+    )
 
     local member = _all_members[uri]
+    if member == nil and set_opts and set_opts.forbid_new then
+        opts.log_debug("New member %s was skipped", uri)
+        return
+    end
     if member and incarnation < member.incarnation then
         error('Can not downgrade incarnation')
     end

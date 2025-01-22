@@ -1,4 +1,7 @@
 local S = rawget(_G, '__membership_stash') or {}
+S.global_params = S.global_params or {
+    forbid_new_members = false,
+}
 
 local log = require('log')
 

@@ -23,6 +23,8 @@ local _expired = table.copy(stash.get('events._expired')) or {
 local _subscribers = table.copy(stash.get('events._subscribers')) or {
     -- [fiber.cond] = true
 }
+local _global_params = stash.get('global_params')
+
 setmetatable(_subscribers, {__mode = 'k'})
 
 function events.after_reload()
@@ -148,7 +150,8 @@ function events.handle(event)
             opts.STATUS_NAMES[event.status]
         )
     end
-    members.set(event.uri, event.status, event.incarnation, { payload = event.payload })
+    members.set(event.uri, event.status, event.incarnation, { payload = event.payload },
+        { forbid_new = _global_params.forbid_new_members })
 
     for cond, _ in pairs(_subscribers) do
         cond:broadcast()
