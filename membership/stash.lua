@@ -1,5 +1,7 @@
 local S = rawget(_G, '__membership_stash') or {}
 
+S['_allowed_uri_set'] = S['_allowed_uri_set'] or {}
+
 local log = require('log')
 
 local function f_body(fn_name, ...)
