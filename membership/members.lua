@@ -19,7 +19,6 @@ local _all_members = table.copy(stash.get('members._all_members')) or {
 }
 
 local _allowed_uri_set = stash.get('_allowed_uri_set')
-local _params = stash.get('_params')
 
 function members.after_reload()
     stash.set('members._all_members', _all_members)
