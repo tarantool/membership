@@ -1024,8 +1024,7 @@ local function set_allowed_members(uris)
     for _, uri in ipairs(uris) do
         _allowed_uri_set[uri] = true
     end
-    fiber.yield()
-    for uri in pairs(stash['members._all_members'] or {}) do
+    for uri in pairs(stash.get('members._all_members') or {}) do
         if not _allowed_uri_set[uri] then
             members.remove(uri)
         end
