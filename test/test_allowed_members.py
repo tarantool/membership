@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import time
-
 servers_list = [13301, 13302, 13303, 13304]
 
 
@@ -23,5 +21,3 @@ def test(servers, helpers):
     assert servers[13301].get_member('localhost:13302') is not None
     assert servers[13301].get_member('localhost:13303') is not None
     assert servers[13301].get_member('localhost:13304') is None
-
-
