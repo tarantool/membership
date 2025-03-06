@@ -18,6 +18,8 @@ local _all_members = table.copy(stash.get('members._all_members')) or {
     -- uri is a string in format '<host>:<port>'
 }
 
+local _allowed_uri_set = stash.get('_allowed_uri_set')
+
 function members.after_reload()
     stash.set('members._all_members', _all_members)
 end
@@ -88,6 +90,13 @@ function members.set(uri, status, incarnation, params)
     checks('string', 'number', 'number', { payload = '?table', clock_delta = '?number' })
 
     local member = _all_members[uri]
+
+    if next(_allowed_uri_set) and not _allowed_uri_set[uri]
+    and (status == opts.SUSPECT or status == opts.LEFT or status == opts.DEAD) then
+        opts.log_debug('Ignoring member %s with status %s', uri, opts.STATUS_NAMES[status])
+        return
+    end
+
     if member and incarnation < member.incarnation then
         error('Can not downgrade incarnation')
     end

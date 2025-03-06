@@ -37,12 +37,14 @@ local _sync_trigger = stash.get('_sync_trigger') or fiber.cond()
 local _ack_trigger = stash.get('_ack_trigger') or fiber.cond()
 local _ack_cache = stash.get('_ack_cache') or {}
 local _resolve_cache = stash.get('_resolve_cache') or {}
+local _allowed_uri_set = stash.get('_allowed_uri_set')
 
 local function after_reload()
     stash.set('_ack_cache', _ack_cache)
     stash.set('_ack_trigger', _ack_trigger)
     stash.set('_sync_trigger', _sync_trigger)
     stash.set('_resolve_cache', _resolve_cache)
+    stash.set('_allowed_uri_set', _allowed_uri_set)
 end
 
 local _sock = stash.get('_sock')
@@ -1004,6 +1006,29 @@ local function remove_member(uri)
     members.remove(uri)
 end
 
+--- Filter out members from the list.
+--- If the function wasn't called or allowed uri list
+--- if empty, all members are allowed.
+-- @function set_allowed_members
+-- @tparam uris table URIs to leave in the list
+local function set_allowed_members(uris)
+    checks('table')
+    events.clear()
+    table.clear(_protocol_round_list)
+    table.clear(_allowed_uri_set)
+    if next(uris) == nil then
+        return
+    end
+    for _, uri in ipairs(uris) do
+        _allowed_uri_set[uri] = true
+    end
+    for uri in pairs(stash.get('members._all_members') or {}) do
+        if not _allowed_uri_set[uri] then
+            members.remove(uri)
+        end
+    end
+end
+
 do -- finish module loading
     opts.after_reload()
     events.after_reload()
@@ -1027,6 +1052,7 @@ return {
     get_member = get_member,
     remove_member = remove_member,
     set_payload = set_payload,
+    set_allowed_members = set_allowed_members,
 
 --- Encryption Functions.
 -- The encryption is handled by the
