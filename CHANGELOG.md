@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Protocol step error when the members list were cleared in process.
+
 ## [2.5.0] - 2025-03-06
 
 ### Added

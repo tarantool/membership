@@ -514,16 +514,18 @@ local function _protocol_step()
     if sent_indirect > 0 then
         ack_data = wait_ack(uri, loop_now, opts.PROTOCOL_PERIOD_SECONDS * 1.0e6)
     end
+
+    -- check again in case if members list has been cleared
+    local member = members.get(uri)
+    if member == nil then
+        return
+    end
     if sent_indirect > 0 and ack_data ~= nil then
-        local member = members.get(uri)
-        if member == nil then
-            return
-        end
         -- calculate time difference between local time and member time
         local delta = _get_clock_delta(ack_data)
         members.set(uri, member.status, member.incarnation, { clock_delta = delta })
         return
-    elseif members.get(uri).status == opts.ALIVE then
+    elseif member.status == opts.ALIVE then
         local myself = members.get(advertise_uri)
         if myself.status ~= opts.ALIVE then
             opts.log_debug('Could not reach node: %s (%s myself)', uri, myself.status)
