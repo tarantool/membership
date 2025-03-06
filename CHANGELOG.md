@@ -6,11 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.5.0] - 2025-03-06
+
 ### Added
 
 - `set_allowed_members` function to add only allowed members to membership process.
 
 ## [2.4.6] - 2025-01-13
+
 ### Added
 
 - `mark_left` function to mark removed members as `left`.
