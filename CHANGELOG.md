@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- `set_allowed_members` function to add only allowed members to membership process.
+
 ## [2.4.6] - 2025-01-13
 ### Added
 
