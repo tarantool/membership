@@ -38,7 +38,6 @@ local _ack_trigger = stash.get('_ack_trigger') or fiber.cond()
 local _ack_cache = stash.get('_ack_cache') or {}
 local _resolve_cache = stash.get('_resolve_cache') or {}
 local _allowed_uri_set = stash.get('_allowed_uri_set')
-local _params = stash.get('_params')
 
 local function after_reload()
     stash.set('_ack_cache', _ack_cache)
@@ -46,7 +45,6 @@ local function after_reload()
     stash.set('_sync_trigger', _sync_trigger)
     stash.set('_resolve_cache', _resolve_cache)
     stash.set('_allowed_uri_set', _allowed_uri_set)
-    stash.set('_params', _params)
 end
 
 local _sock = stash.get('_sock')
