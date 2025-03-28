@@ -94,6 +94,8 @@ function members.set(uri, status, incarnation, params)
     if next(_allowed_uri_set) and not _allowed_uri_set[uri]
     and (status == opts.SUSPECT or status == opts.LEFT or status == opts.DEAD) then
         opts.log_debug('Ignoring member %s with status %s', uri, opts.STATUS_NAMES[status])
+        -- removes instance if it is not in the allowed list and dead
+        members.remove(uri)
         return
     end
 
