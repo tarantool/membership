@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.5.2] - 2025-03-31
+
 ### Fixed
 
 - Dead members which weren't allowed now are removed from the list.
