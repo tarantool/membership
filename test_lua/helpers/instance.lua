@@ -21,6 +21,7 @@ local listen = os.getenv('TARANTOOL_LISTEN') or '13301'
 print("Starting Tarantool instance on port:", listen)
 local wal_dir = arg[2] or '.'
 local vinyl_dir = arg[4] or '.'
+
 box.cfg({
     listen = listen,
     wal_dir = os.getenv('TARANTOOL_WAL_DIR') or './wal',
