@@ -1,7 +1,6 @@
 local fio = require('fio')
 local log = require('log')
 local socket = require('socket') -- Добавлено для проверки портов
---local Server = require('cartridge.test-helpers.server')
 local Server = require('test.helpers.server')
 local fiber = require('fiber')
 local cluster = {}
