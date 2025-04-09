@@ -27,6 +27,7 @@ box.cfg({
     vinyl_dir = os.getenv('TARANTOOL_VINYL_DIR') or './vinyl',
     work_dir = os.getenv('TARANTOOL_WORKDIR') or '.'
 })
+
 print("Starting server on port:", listen)
 local hostname = os.getenv('TARANTOOL_HOSTNAME') or 'localhost'
 
