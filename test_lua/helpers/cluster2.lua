@@ -10,9 +10,9 @@ function cluster.start(hostname, ports)
     -- Добавлено очищение данных в начало
     local datadir = fio.pathjoin(fio.cwd(), 'test_cluster_data')
     if fio.path.exists(datadir) then
-        fio.rmtree(datadir)  -- Удаляем старые данные
+        fio.rmtree(datadir) -- Удаляем старые данные
     end
-    fio.mkdir(datadir)  -- Создаем новую директорию
+    fio.mkdir(datadir)      -- Создаем новую директорию
 
     if cluster.servers ~= nil then
         log.warn("Кластер уже запущен")
@@ -39,7 +39,7 @@ function cluster.start(hostname, ports)
     cluster.servers = {}
 
     -- Базовая директория для хранения данных серверов
-    local instance_path = fio.pathjoin(fio.cwd(),"test", "helpers",'instance.lua')
+    local instance_path = fio.pathjoin(fio.cwd(), "test", "helpers", 'instance.lua')
 
     -- Создаем и запускаем серверы
     for i, port in ipairs(ports) do
@@ -56,9 +56,9 @@ function cluster.start(hostname, ports)
             alias = alias,
             command = instance_path, -- путь к instance.lua
             workdir = workdir,
-            args = {               -- Добавить аргументы командной строки
-            '--wal-dir', fio.pathjoin(workdir, 'wal'),
-            '--vinyl-dir', fio.pathjoin(workdir, 'vinyl')
+            args = {                 -- Добавить аргументы командной строки
+                '--wal-dir', fio.pathjoin(workdir, 'wal'),
+                '--vinyl-dir', fio.pathjoin(workdir, 'vinyl')
             },
             advertise_port = tonumber(port),
             env = {
@@ -88,7 +88,7 @@ function cluster.start(hostname, ports)
     end
 
     for _, server in ipairs(cluster.servers) do
-        server:wait_until_ready({timeout = 120})
+        server:wait_until_ready({ timeout = 120 })
     end
 
     log.info("Кластер успешно запущен, количество серверов: " .. #cluster.servers)

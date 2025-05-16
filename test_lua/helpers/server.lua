@@ -265,7 +265,7 @@ end
 
 function Server:is_ready()
     local net_box = require('net.box')
-    local conn = net_box.connect(self.advertise_port, {user = 'guest', password = ''})
+    local conn = net_box.connect(self.advertise_port, { user = 'guest', password = '' })
     if conn:is_connected() then
         conn:close()
         return true

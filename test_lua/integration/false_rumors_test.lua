@@ -68,7 +68,7 @@ g.test_flickering = function()
 
     cluster.servers[1]:eval([[
         local opts = require('membership.options')
-        opts.NUM_FAILURE_DETECTION_SUBGROUPS = 0 
+        opts.NUM_FAILURE_DETECTION_SUBGROUPS = 0
     ]])
 
     t.helpers.retrying(
@@ -88,7 +88,7 @@ g.test_nonsuspiciousness = function()
 
     cluster.servers[1]:eval([[
         local opts = require('membership.options')
-        opts.SUSPICIOUSNESS = false   
+        opts.SUSPICIOUSNESS = false
     ]])
 
     t.helpers.retrying(

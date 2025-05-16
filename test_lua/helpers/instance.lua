@@ -32,7 +32,11 @@ box.cfg({
 print("Starting server on port:", listen)
 local hostname = os.getenv('TARANTOOL_HOSTNAME') or 'localhost'
 
-box.schema.user.grant('guest', 'read,write,execute,create,alter,drop', 'universe', nil, {if_not_exists=true})
+box.schema.user.grant(
+    'guest',
+    'read,write,execute,create,alter,drop',
+    'universe', nil, { if_not_exists = true }
+)
 
 -- Tune periods to speed up tests
 -- Supposing loopback roundtrip is about 0.1ms
