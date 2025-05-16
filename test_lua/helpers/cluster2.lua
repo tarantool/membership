@@ -6,7 +6,7 @@ local fiber = require('fiber')
 local cluster = {}
 
 -- Создание и запуск экземпляров кластера
-function cluster.start(ports)
+function cluster.start(hostname, ports)
     -- Добавлено очищение данных в начало
     local datadir = fio.pathjoin(fio.cwd(), 'test_cluster_data')
     if fio.path.exists(datadir) then
@@ -26,7 +26,7 @@ function cluster.start(ports)
     -- Проверка занятости портов
     for _, port in ipairs(ports) do
         local sock = socket.tcp()
-        local is_busy = sock:connect('localhost', port)
+        local is_busy = sock:connect(hostname, port)
         sock:close()
         if is_busy then
             error("Port " .. port .. " is already in use!")
@@ -62,7 +62,9 @@ function cluster.start(ports)
             },
             advertise_port = tonumber(port),
             env = {
-                TARANTOOL_LISTEN = tostring(port), },
+                TARANTOOL_LISTEN = tostring(port),
+                TARANTOOL_HOSTNAME = hostname,
+            },
 
             net_box_credentials = {
                 user = 'guest',
@@ -80,7 +82,7 @@ function cluster.start(ports)
         -- Запускаем сервер
         server:start()
         -- Добавлено: задержка между запуском серверов
-        require('fiber').sleep(1)
+        fiber.sleep(1)
 
         log.info("Запущен сервер " .. alias .. " на порту " .. port)
     end
