@@ -377,7 +377,7 @@ function Server:broadcast(port)
     return self:eval(cmd)
 end
 
-function Server:members(uri)
+function Server:members()
     return self:eval("return membership.members()")
 end
 
