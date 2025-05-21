@@ -9,58 +9,47 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-20.04]
         tarantool:
           - '1.10'
-          - '2.6'
-          - '2.7'
-          - '2.8'
           - '2.10'
-    runs-on: ${{ matrix.runs-on }}
+          - '2.11'
+
     env:
       CMAKE_LDOC_FIND_REQUIRED: 'YES'
+
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.8.14"
-      - uses: tarantool/setup-tarantool@v2
+      - uses: actions/checkout@v4
+
+      - uses: tarantool/setup-tarantool@v3
         with:
           tarantool-version: ${{ matrix.tarantool }}
 
-      # Setup python packages
-      - name: Cache pip packages
-        uses: actions/cache@v3
-        id: cache-venv
-        with:
-          path: ./venv
-          key: cache-venv-${{ matrix.runs-on }}-01
-      - name: Run pip install
-        run: |
-          python -m venv ./venv && . ./venv/bin/activate
-          pip install -r test/requirements.txt
-        if: steps.cache-venv.outputs.cache-hit != 'true'
-      - run: echo "$PWD/venv/bin" >> $GITHUB_PATH
-
-      # Setup luacheck and ldoc
       - name: Cache rocks
         uses: actions/cache@v3
         id: cache-rocks
         with:
           path: .rocks/
-          key: cache-rocks-${{ matrix.runs-on }}-01
-      -
-        run: tarantoolctl rocks install luacheck
+          key: cache-rocks-${{ matrix.tarantool }}-${{ hashFiles('membership-scm-1.rockspec') }}
+      
+      - name: Install dependencies
         if: steps.cache-rocks.outputs.cache-hit != 'true'
-      -
-        run: tarantoolctl rocks install ldoc --server=https://tarantool.github.io/LDoc/
-        if: steps.cache-rocks.outputs.cache-hit != 'true'
-      - run: echo ".rocks/bin" >> $GITHUB_PATH
+        run: |
+          tarantoolctl rocks install luacheck
+          tarantoolctl rocks install luatest
+          tarantoolctl rocks install ldoc --server=https://tarantool.github.io/LDoc/
 
-      - run: luacheck membership-scm-1.rockspec
-      - run: flake8 test --ignore=E501
-      - run: tarantoolctl rocks make
-      - run: pytest -v
+      - name: Add rocks to PATH
+        run: echo ".rocks/bin" >> $GITHUB_PATH
 
-      # Cleanup cached paths
-      - run: tarantoolctl rocks remove membership
+      - name: Run luacheck
+        run: luacheck membership-scm-1.rockspec membership.lua membership/ test/
+
+      - name: Build project
+        run: tarantoolctl rocks make
+
+      - name: Run tests
+        run: .rocks/bin/luatest -v
+
+      - name: Cleanup cached paths
+        run: tarantoolctl rocks remove membership
