@@ -654,9 +654,10 @@ end
 
 
 --- Discover members in local network.
--- Send UDP broadcast to all networks
--- discovered by `getifaddrs()` C call
+-- Send UDP broadcast on the specified `port`
+-- to all networks discovered by `getifaddrs()` C call
 -- @function broadcast
+-- @tparam number port UDP port of the broadcast
 -- @return[1] `true` if broadcast was sent
 -- @return[2] `false` if `getifaddrs()` fails.
 local function broadcast(port)
