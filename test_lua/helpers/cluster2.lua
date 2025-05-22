@@ -6,13 +6,13 @@ local fiber = require('fiber')
 local cluster = {}
 
 -- Создание и запуск экземпляров кластера
-function cluster.start(ports)
+function cluster.start(hostname, ports)
     -- Добавлено очищение данных в начало
     local datadir = fio.pathjoin(fio.cwd(), 'test_cluster_data')
     if fio.path.exists(datadir) then
-        fio.rmtree(datadir)  -- Удаляем старые данные
+        fio.rmtree(datadir) -- Удаляем старые данные
     end
-    fio.mkdir(datadir)  -- Создаем новую директорию
+    fio.mkdir(datadir)      -- Создаем новую директорию
 
     if cluster.servers ~= nil then
         log.warn("Кластер уже запущен")
@@ -26,7 +26,7 @@ function cluster.start(ports)
     -- Проверка занятости портов
     for _, port in ipairs(ports) do
         local sock = socket.tcp()
-        local is_busy = sock:connect('localhost', port)
+        local is_busy = sock:connect(hostname, port)
         sock:close()
         if is_busy then
             error("Port " .. port .. " is already in use!")
@@ -39,7 +39,7 @@ function cluster.start(ports)
     cluster.servers = {}
 
     -- Базовая директория для хранения данных серверов
-    local instance_path = fio.pathjoin(fio.cwd(),"test", "helpers",'instance.lua')
+    local instance_path = fio.pathjoin(fio.cwd(), "test", "helpers", 'instance.lua')
 
     -- Создаем и запускаем серверы
     for i, port in ipairs(ports) do
@@ -56,13 +56,15 @@ function cluster.start(ports)
             alias = alias,
             command = instance_path, -- путь к instance.lua
             workdir = workdir,
-            args = {               -- Добавить аргументы командной строки
-            '--wal-dir', fio.pathjoin(workdir, 'wal'),
-            '--vinyl-dir', fio.pathjoin(workdir, 'vinyl')
+            args = {                 -- Добавить аргументы командной строки
+                '--wal-dir', fio.pathjoin(workdir, 'wal'),
+                '--vinyl-dir', fio.pathjoin(workdir, 'vinyl')
             },
             advertise_port = tonumber(port),
             env = {
-                TARANTOOL_LISTEN = tostring(port), },
+                TARANTOOL_LISTEN = tostring(port),
+                TARANTOOL_HOSTNAME = hostname,
+            },
 
             net_box_credentials = {
                 user = 'guest',
@@ -80,13 +82,13 @@ function cluster.start(ports)
         -- Запускаем сервер
         server:start()
         -- Добавлено: задержка между запуском серверов
-        require('fiber').sleep(1)
+        fiber.sleep(1)
 
         log.info("Запущен сервер " .. alias .. " на порту " .. port)
     end
 
     for _, server in ipairs(cluster.servers) do
-        server:wait_until_ready({timeout = 120})
+        server:wait_until_ready({ timeout = 120 })
     end
 
     log.info("Кластер успешно запущен, количество серверов: " .. #cluster.servers)

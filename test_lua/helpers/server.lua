@@ -32,7 +32,7 @@ local Server = luatest.Server:inherit({})
 
 Server.constructor_checks = fun.chain(Server.constructor_checks, {
     alias = 'string',
-    --cluster_cookie = 'string',
+    cluster_cookie = 'string',
 
     advertise_port = 'number',
     advertise_uri = '?string',
@@ -265,7 +265,7 @@ end
 
 function Server:is_ready()
     local net_box = require('net.box')
-    local conn = net_box.connect(self.advertise_port, {user = 'guest', password = ''})
+    local conn = net_box.connect(self.advertise_port, { user = 'guest', password = '' })
     if conn:is_connected() then
         conn:close()
         return true
@@ -360,6 +360,39 @@ end
 --- Download application config.
 function Server:download_config()
     return yaml.decode(self:http_request('get', '/admin/config').body)
+end
+
+function Server:add_member(uri)
+    local cmd = string.format("return membership.add_member('%s')", uri)
+    return self:eval(cmd)
+end
+
+function Server:probe_uri(uri)
+    local cmd = string.format("return membership.probe_uri('%s')", uri)
+    return self:eval(cmd)
+end
+
+function Server:broadcast(port)
+    local cmd = string.format("return membership.broadcast(%d)", port)
+    return self:eval(cmd)
+end
+
+function Server:members()
+    return self:eval("return membership.members()")
+end
+
+function Server:get_member(uri)
+    local cmd = string.format("return membership.get_member('%s')", uri)
+    return self:eval(cmd)
+end
+
+function Server:myself()
+    return self:eval("return membership.myself()")
+end
+
+function Server:check_status(uri, status)
+    local cmd = string.format("return membership.get_member('%s')", uri)
+    luatest.assert_equals(self:eval(cmd)['status'], status)
 end
 
 return Server
