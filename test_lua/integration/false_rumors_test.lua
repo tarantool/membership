@@ -53,7 +53,7 @@ end
 
 g.test_indirect_ping = function()
     -- Ack timeout shouldn't trigger failure detection
-    -- because inderect pings still work
+    -- because indirect pings still work
     cluster.servers[1]:eval([[
         local opts = require('membership.options')
         opts.ACK_TIMEOUT_SECONDS = 0
