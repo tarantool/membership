@@ -1,6 +1,6 @@
 local t = require('luatest')
 local g = t.group()
-local cluster = require('test.helpers.cluster2')
+local cluster = require('test.helpers.cluster')
 local log = require('log')
 
 local FIRST_PORT = 13301

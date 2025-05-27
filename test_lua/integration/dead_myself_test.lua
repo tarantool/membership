@@ -1,6 +1,6 @@
 local t = require('luatest')
 local g = t.group()
-local cluster = require('test.helpers.cluster2')
+local cluster = require('test.helpers.cluster')
 
 local SERVER_LIST = { 13301 }
 
