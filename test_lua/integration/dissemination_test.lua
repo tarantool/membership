@@ -31,15 +31,15 @@ g.test_discover_join = function()
     start = fiber.clock()
     t.helpers.retrying({}, function()
         for _, server in ipairs(cluster.servers) do
-            local alive_count = server:eval([[
+            local alive_count = server:exec(function()
                 local alive_count = 0
-                for uri, m in membership.pairs() do
+                for _, m in membership.pairs() do
                     if m.status == 'alive' then
                         alive_count = alive_count + 1
                     end
                 end
                 return alive_count
-            ]])
+            end)
             t.assert_equals(alive_count, SERVER_COUNT)
         end
     end)

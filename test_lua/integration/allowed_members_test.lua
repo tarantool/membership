@@ -14,10 +14,10 @@ g.after_all(function()
 end)
 
 g.test_smoke = function()
-    local cmd_template = "return membership.probe_uri('localhost:%d')"
-
     for i = 1, 4 do
-        cluster.servers[1]:eval(cmd_template:format(SERVER_LIST[i]))
+        cluster.servers[1]:exec(function(port)
+            return membership.probe_uri(string.format('localhost:%d', port))
+        end, { SERVER_LIST[i] })
     end
 
     cluster.servers[3]:stop()
@@ -34,11 +34,11 @@ g.test_smoke = function()
         cluster.servers[1], 'localhost:13304', 'dead'
     )
 
-    cluster.servers[1]:eval([[
+    cluster.servers[1]:exec(function()
         return membership.set_allowed_members({
             'localhost:13301', 'localhost:13302', 'localhost:13303',
         })
-    ]])
+    end)
 
     fiber.sleep(2)
 

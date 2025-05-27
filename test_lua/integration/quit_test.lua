@@ -23,7 +23,7 @@ g.test_join = function()
 end
 
 g.test_quit = function()
-    t.assert(cluster.servers[2]:eval('return membership.leave()'))
+    t.assert(cluster.servers[2]:exec(function() return membership.leave() end))
 
     t.helpers.retrying(
         {},
@@ -31,11 +31,13 @@ g.test_quit = function()
         cluster.servers[1], 'localhost:13302', 'left'
     )
 
-    t.assert(not cluster.servers[2]:eval('return membership.leave()'))
+    t.assert(not cluster.servers[2]:exec(function() return membership.leave() end))
 end
 
 g.test_rejoin = function()
-    t.assert(cluster.servers[2]:eval('return membership.init("localhost", 13302)'))
+    t.assert(cluster.servers[2]:exec(function()
+        return membership.init("localhost", 13302)
+    end))
     t.assert(cluster.servers[1]:add_member('localhost:13302'))
 
     t.helpers.retrying(
@@ -52,7 +54,9 @@ g.test_mark_left = function()
         cluster.servers[1], 'localhost:13302', 'alive'
     )
 
-    t.assert(cluster.servers[1]:eval('return membership.mark_left("localhost:13302")'))
+    t.assert(cluster.servers[1]:exec(function()
+        return membership.mark_left("localhost:13302")
+    end))
 
     t.helpers.retrying(
         {},
@@ -61,8 +65,12 @@ g.test_mark_left = function()
     )
 
     -- already has left
-    t.assert(not cluster.servers[1]:eval('return membership.mark_left("localhost:13302")'))
+    t.assert(not cluster.servers[1]:exec(function()
+        return membership.mark_left("localhost:13302")
+    end))
 
     -- there are no such member
-    t.assert(not cluster.servers[1]:eval('return membership.mark_left("localhost:10000")'))
+    t.assert(not cluster.servers[1]:exec(function()
+        return membership.mark_left("localhost:10000")
+    end))
 end

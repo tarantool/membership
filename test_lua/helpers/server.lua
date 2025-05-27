@@ -363,36 +363,46 @@ function Server:download_config()
 end
 
 function Server:add_member(uri)
-    local cmd = string.format("return membership.add_member('%s')", uri)
-    return self:eval(cmd)
+    return self:exec(function(u)
+        return membership.add_member(u)
+    end, { uri })
 end
 
 function Server:probe_uri(uri)
-    local cmd = string.format("return membership.probe_uri('%s')", uri)
-    return self:eval(cmd)
+    return self:exec(function(u)
+        return membership.probe_uri(u)
+    end, { uri })
 end
 
 function Server:broadcast(port)
-    local cmd = string.format("return membership.broadcast(%d)", port)
-    return self:eval(cmd)
+    return self:exec(function(p)
+        return membership.broadcast(p)
+    end, { port })
 end
 
 function Server:members()
-    return self:eval("return membership.members()")
+    return self:exec(function()
+        return membership.members()
+    end)
 end
 
 function Server:get_member(uri)
-    local cmd = string.format("return membership.get_member('%s')", uri)
-    return self:eval(cmd)
+    return self:exec(function(u)
+        return membership.get_member(u)
+    end, { uri })
 end
 
 function Server:myself()
-    return self:eval("return membership.myself()")
+    return self:exec(function()
+        return membership.myself()
+    end)
 end
 
 function Server:check_status(uri, status)
-    local cmd = string.format("return membership.get_member('%s')", uri)
-    luatest.assert_equals(self:eval(cmd)['status'], status)
+    local exec_status = self:exec(function(u)
+        return membership.get_member(u)
+    end, { uri })['status']
+    luatest.assert_equals(exec_status, status)
 end
 
 return Server

@@ -59,8 +59,8 @@ g.test_reinit = function()
     -- Change hostname
     t.assert(t.helpers.retrying(
         {},
-        cluster.servers[1].eval,
-        cluster.servers[1], "return membership.init('127.0.0.1', 13301)"
+        cluster.servers[1].exec,
+        cluster.servers[1], function() return membership.init('127.0.0.1', 13301) end
     ))
     t.helpers.retrying(
         {},
@@ -76,8 +76,8 @@ g.test_reinit = function()
     -- Change port
     t.assert(t.helpers.retrying(
         {},
-        cluster.servers[1].eval,
-        cluster.servers[1], "return membership.init('127.0.0.1', 13303)"
+        cluster.servers[1].exec,
+        cluster.servers[1], function() return membership.init('127.0.0.1', 13303) end
     ))
     t.helpers.retrying(
         {},
@@ -98,8 +98,8 @@ g.test_reinit = function()
     -- Revert all changes
     t.assert(t.helpers.retrying(
         {},
-        cluster.servers[1].eval,
-        cluster.servers[1], "return membership.init('localhost', 13301)"
+        cluster.servers[1].exec,
+        cluster.servers[1], function() return membership.init('localhost', 13301) end
     ))
     t.helpers.retrying(
         {},
@@ -116,9 +116,8 @@ end
 g.test_error = function()
     t.assert_error_msg_equals(
         'Socket bind error (13302/udp): Address already in use',
-        cluster.servers[1].eval,
-        cluster.servers[1],
-        "return membership.init('localhost', 13302)"
+        cluster.servers[1].exec,
+        cluster.servers[1], function() return membership.init('localhost', 13302) end
     )
 
     t.assert(cluster.servers[1]:probe_uri('localhost:13301'))

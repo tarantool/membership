@@ -14,7 +14,9 @@ end)
 
 g.test_join = function()
     t.assert(cluster.servers[1]:add_member('localhost:13302'))
-    t.assert_equals(cluster.servers[1]:eval('return membership.get_encryption_key()'), nil)
+    t.assert_equals(cluster.servers[1]:exec(function()
+        return membership.get_encryption_key()
+    end), nil)
 
     t.helpers.retrying(
         {},
@@ -29,9 +31,13 @@ g.test_join = function()
 end
 
 g.test_enable_encryption = function()
-    cluster.servers[2]:eval('return membership.set_encryption_key("XXXXXX")')
+    cluster.servers[2]:exec(function()
+        return membership.set_encryption_key("XXXXXX")
+    end)
     t.assert_equals(
-        cluster.servers[2]:eval('return membership.get_encryption_key()'),
+        cluster.servers[2]:exec(function()
+            return membership.get_encryption_key()
+        end),
         string.rjust("XXXXXX", 32)
     )
     t.helpers.retrying(
@@ -45,9 +51,13 @@ g.test_enable_encryption = function()
         cluster.servers[2], 'localhost:13301', 'non-decryptable'
     )
 
-    cluster.servers[1]:eval('return membership.set_encryption_key("XXXXXX")')
+    cluster.servers[1]:exec(function()
+        return membership.set_encryption_key("XXXXXX")
+    end)
     t.assert_equals(
-        cluster.servers[1]:eval('return membership.get_encryption_key()'),
+        cluster.servers[1]:exec(function()
+            return membership.get_encryption_key()
+        end),
         string.rjust("XXXXXX", 32)
     )
     t.helpers.retrying(
@@ -61,13 +71,15 @@ g.test_enable_encryption = function()
         cluster.servers[2], 'localhost:13301', 'alive'
     )
 
-    cluster.servers[2]:eval('return membership.leave()')
+    cluster.servers[2]:exec(function()
+        return membership.leave()
+    end)
     cluster.servers[1]:check_status('localhost:13302', 'left')
 
-    cluster.servers[2]:eval([[
+    cluster.servers[2]:exec(function()
         assert(membership.init("localhost", 13302))
         assert(membership.probe_uri("localhost:13301"))
-    ]])
+    end)
     t.helpers.retrying(
         {},
         cluster.servers[1].check_status,
@@ -76,9 +88,13 @@ g.test_enable_encryption = function()
 end
 
 g.test_change_encryption = function()
-    cluster.servers[1]:eval('return membership.set_encryption_key("YY")')
+    cluster.servers[1]:exec(function()
+        return membership.set_encryption_key("YY")
+    end)
     t.assert_equals(
-        cluster.servers[1]:eval('return membership.get_encryption_key()'),
+        cluster.servers[1]:exec(function()
+            return membership.get_encryption_key()
+        end),
         string.rjust("YY", 32)
     )
     t.helpers.retrying(
@@ -92,9 +108,13 @@ g.test_change_encryption = function()
         cluster.servers[2], 'localhost:13301', 'non-decryptable'
     )
 
-    cluster.servers[2]:eval('return membership.set_encryption_key("YY")')
+    cluster.servers[2]:exec(function()
+        return membership.set_encryption_key("YY")
+    end)
     t.assert_equals(
-        cluster.servers[2]:eval('return membership.get_encryption_key()'),
+        cluster.servers[2]:exec(function()
+            return membership.get_encryption_key()
+        end),
         string.rjust("YY", 32)
     )
     t.helpers.retrying(
@@ -110,11 +130,12 @@ g.test_change_encryption = function()
 end
 
 g.test_disable_encryption = function()
-    cluster.servers[2]:eval('return membership.set_encryption_key(nil)')
-    t.assert_equals(
-        cluster.servers[2]:eval('return membership.get_encryption_key()'),
-        nil
-    )
+    cluster.servers[2]:exec(function()
+        return membership.set_encryption_key(nil)
+    end)
+    t.assert_equals(cluster.servers[2]:exec(function()
+        return membership.get_encryption_key()
+    end), nil)
     t.helpers.retrying(
         {},
         cluster.servers[1].check_status,
@@ -126,11 +147,12 @@ g.test_disable_encryption = function()
         cluster.servers[2], 'localhost:13301', 'non-decryptable'
     )
 
-    cluster.servers[1]:eval('return membership.set_encryption_key(nil)')
-    t.assert_equals(
-        cluster.servers[1]:eval('return membership.get_encryption_key()'),
-        nil
-    )
+    cluster.servers[1]:exec(function()
+        return membership.set_encryption_key(nil)
+    end)
+    t.assert_equals(cluster.servers[1]:exec(function()
+        return membership.get_encryption_key()
+    end), nil)
     t.helpers.retrying(
         {},
         cluster.servers[1].check_status,
@@ -148,14 +170,18 @@ g.test_gh36 = function()
     -- discovering non-decryptable members
     for i = 1, 10 do
         local uri = string.format("s%03d:oO", i)
-        cluster.servers[2]:eval(
-            string.format('membership.probe_uri("%s")', uri)
-        )
+        cluster.servers[2]:exec(function(u)
+            membership.probe_uri(u)
+        end, { uri })
     end
 
-    cluster.servers[1]:eval('return membership.set_encryption_key("ZZ")')
+    cluster.servers[1]:exec(function()
+        return membership.set_encryption_key("ZZ")
+    end)
     t.assert_equals(
-        cluster.servers[1]:eval('return membership.get_encryption_key()'),
+        cluster.servers[1]:exec(function()
+            return membership.get_encryption_key()
+        end),
         string.rjust("ZZ", 32)
     )
     t.helpers.retrying(

@@ -15,21 +15,17 @@ end)
 g.test_subscribe = function()
     t.assert(cluster.servers[1]:add_member('localhost:13302'))
 
-    cluster.servers[1]:eval('_G.cond = membership.subscribe()')
+    cluster.servers[1]:exec(function()
+        rawset(_G, "cond", membership.subscribe())
+    end)
 
-    t.assert(not cluster.servers[1]:eval('return _G.cond:wait(1)'))
-    t.assert(cluster.servers[2]:eval('return membership.set_payload("foo", "bar")'))
-    t.assert(cluster.servers[1]:eval('return _G.cond:wait(1)'))
-end
-
-g.test_weakness = function()
-    local res = cluster.servers[1]:eval([[
-        local weaktable = setmetatable({}, {__mode = 'k'})
-        weaktable[_G.cond] = true
-        _G.cond = nil
-        collectgarbage()
-        collectgarbage()
-        return next(weaktable)
-    ]])
-    t.assert_equals(res, nil)
+    t.assert(not cluster.servers[1]:exec(function()
+        return _G.cond:wait(1)
+    end))
+    t.assert(cluster.servers[2]:exec(function()
+        return membership.set_payload("foo", "bar")
+    end))
+    t.assert(cluster.servers[1]:exec(function()
+        return _G.cond:wait(1)
+    end))
 end

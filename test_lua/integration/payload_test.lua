@@ -19,7 +19,9 @@ local function check_payload(server, uri, payload, status)
 end
 
 g.test_payload = function()
-    t.assert(cluster.servers[1]:eval('return membership.set_payload("foo1", {bar = "buzz"})'))
+    t.assert(cluster.servers[1]:exec(function()
+        return membership.set_payload("foo1", { bar = "buzz" })
+    end))
     t.assert(cluster.servers[1]:add_member('localhost:13302'))
     t.helpers.retrying(
         {},
@@ -33,7 +35,9 @@ g.test_payload = function()
         'alive'
     )
 
-    t.assert(cluster.servers[1]:eval('return membership.set_payload("foo2", 42)'))
+    t.assert(cluster.servers[1]:exec(function()
+        return membership.set_payload("foo2", 42)
+    end))
     t.helpers.retrying(
         {},
         check_payload,
@@ -47,7 +51,9 @@ g.test_payload = function()
         'alive'
     )
 
-    t.assert(cluster.servers[1]:eval('return membership.set_payload("foo1", nil)'))
+    t.assert(cluster.servers[1]:exec(function()
+        return membership.set_payload("foo1", nil)
+    end))
     t.helpers.retrying(
         {},
         check_payload,
@@ -58,14 +64,14 @@ g.test_payload = function()
         'alive'
     )
 
-    t.assert(cluster.servers[1]:eval([[
-        _G.checks_disabled = true
+    t.assert(cluster.servers[1]:exec(function()
+        rawset(_G, "checks_disabled", true)
         local opts = require('membership.options')
         require('membership.events').generate('13301', opts.DEAD, 31, 37)
-        _G.checks_disabled = false
+        rawset(_G, "checks_disabled", false)
 
         return true
-    ]]))
+    end))
     t.helpers.retrying(
         {},
         check_payload,
