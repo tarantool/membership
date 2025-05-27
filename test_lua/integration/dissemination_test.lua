@@ -1,6 +1,7 @@
 local t = require('luatest')
 local g = t.group()
 local cluster = require('test.helpers.cluster')
+local fiber = require('fiber')
 local log = require('log')
 
 local FIRST_PORT = 13301
@@ -19,17 +20,15 @@ g.after_all(function()
 end)
 
 g.test_discover_join = function()
-    local start, finish
-
-    start = os.clock()
+    local start = fiber.clock()
     for i = 1, SERVER_COUNT do
         t.assert(cluster.servers[1]:probe_uri(
             string.format('localhost:%s', FIRST_PORT + i - 1)))
     end
-    finish = os.clock()
-    log.info(string.format("Probe all in %.3fs", finish - start))
+    local duration = fiber.clock() - start
+    log.info(string.format("Probe all in %.3fs", duration))
 
-    start = os.clock()
+    start = fiber.clock()
     t.helpers.retrying({}, function()
         for _, server in ipairs(cluster.servers) do
             local alive_count = server:eval([[
@@ -44,9 +43,8 @@ g.test_discover_join = function()
             t.assert_equals(alive_count, SERVER_COUNT)
         end
     end)
-    finish = os.clock()
-
-    log.info(string.format('Full mesh in %.3fs', finish - start))
+    duration = fiber.clock() - start
+    log.info(string.format('Full mesh in %.3fs', duration))
 end
 
 g.test_discover_kill = function()
