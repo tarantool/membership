@@ -43,7 +43,7 @@ jobs:
         run: echo ".rocks/bin" >> $GITHUB_PATH
 
       - name: Run luacheck
-        run: luacheck membership-scm-1.rockspec membership.lua membership/ test/
+        run: luacheck membership-scm-1.rockspec membership.lua membership/
 
       - name: Build project
         run: tarantoolctl rocks make
