@@ -46,6 +46,11 @@ g.test_probe_uri = function()
         is_linux = (os_name == 'Linux')
     end
 
+    t.skip_if(
+        major == 2 and minor == 11,
+        'Temporarily skipped due to warning capture issues for Tarantool 2.11'
+    )
+
     local expected_warnings
     if (major < 2) or (major == 2 and minor < 5) then
         expected_warnings = {
