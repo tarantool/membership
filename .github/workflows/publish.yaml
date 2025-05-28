@@ -10,7 +10,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: tarantool/rocks.tarantool.org/github-action@master
         with:
           auth: ${{ secrets.ROCKS_AUTH }}
@@ -22,7 +22,7 @@ jobs:
     env:
       CMAKE_LDOC_FIND_REQUIRED: 'YES'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: tarantool/setup-tarantool@v2
         with:
           tarantool-version: '2.5'
