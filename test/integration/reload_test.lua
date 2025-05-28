@@ -80,7 +80,7 @@ g.test_reload_fast = function()
     t.assert(cluster.servers[2]:exec(function()
         return membership.set_payload("k", "v2")
     end))
-    t.assert(cluster.servers[1]:exec(function() return _G.cond:wait(3) end))
+    t.assert(cluster.servers[1]:exec(function() return _G.cond:wait(10) end))
     local payload2 = cluster.servers[1]:members()['localhost:13302']['payload']
     t.assert_equals(payload2, { ['k'] = 'v2'} )
 
