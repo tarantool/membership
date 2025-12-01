@@ -13,14 +13,6 @@ g.after_all(function()
 end)
 
 g.test_probe_uri = function()
-    t.assert(cluster.servers[1]:exec(function()
-        rawset(_G, "warnings", {})
-        require('log').warn = function(...)
-            table.insert(warnings, string.format(...))
-        end
-        return true
-    end))
-
     t.assert(cluster.servers[1]:probe_uri('localhost:13301'))
     t.assert_equals({ cluster.servers[1]:probe_uri('localhost:13302') }, { nil, 'no response' })
     t.assert_equals({ cluster.servers[1]:probe_uri('127.0.0.1:13301') }, { nil, 'no response' })
@@ -30,8 +22,6 @@ g.test_probe_uri = function()
     t.assert_equals({ cluster.servers[1]:probe_uri('unknown-host:9') }, { nil, 'ping was not sent' })
     t.assert_equals({ cluster.servers[1]:probe_uri('-:/') }, { nil, 'ping was not sent' })
 
-    -- https://github.com/tarantool/tarantool/commit/92fe50fa999d6153e8c4d5d43fb0c419ce05350e
-    -- Tarantool didn't return error message up to 2.5
     local version = cluster.servers[1]:exec(function() return _TARANTOOL end)
 
     local version_parts = string.split(version, '.')
@@ -46,19 +36,17 @@ g.test_probe_uri = function()
         is_linux = (os_name == 'Linux')
     end
 
-    t.skip_if(
-        major == 2 and minor == 11,
-        'Temporarily skipped due to warning capture issues for Tarantool 2.11'
-    )
-
     local expected_warnings
+
+    -- https://github.com/tarantool/tarantool/commit/92fe50fa999d6153e8c4d5d43fb0c419ce05350e
+    -- Tarantool didn't return error message up to 2.5
     if (major < 2) or (major == 2 and minor < 5) then
         expected_warnings = {
             'getaddrinfo: Unknown error (unix/:/dev/null)',
             'getaddrinfo: Unknown error (unknown-host:9)',
             'getaddrinfo: Unknown error (-)'
         }
-    elseif major == 2 and minor == 10 then
+    elseif major == 2 and minor >= 10 then
         expected_warnings = {
             'getaddrinfo: Servname not supported for ai_socktype: Input/output error (unix/:/dev/null)',
             'getaddrinfo: Temporary failure in name resolution: Input/output error (unknown-host:9)',
@@ -78,8 +66,11 @@ g.test_probe_uri = function()
         }
     end
 
-    t.assert_equals(
-        cluster.servers[1]:exec(function() return warnings end),
-        expected_warnings
-    )
+    local function escape_pattern(s)
+        return (s:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%1"))
+    end
+
+    for _, warning in pairs(expected_warnings) do
+        t.assert_equals(cluster.servers[1]:grep_log(escape_pattern(warning)), warning)
+    end
 end

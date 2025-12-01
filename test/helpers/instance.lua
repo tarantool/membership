@@ -49,7 +49,7 @@ if not _G.is_initialized then
     local socket_mt = getmetatable(socket_lib)
     local create_socket = socket_mt.__call
     socket_mt.__call = function(...)
-        log.error('Monkeypatching socket')
+        log.info('Monkeypatching socket')
         local sock = create_socket(...)
         local sendto = sock.sendto
         function sock.sendto(self, host, port, msg)
