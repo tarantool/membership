@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Member payload could be lost permanently after `leave()` and a subsequent rejoin.
+
 ## [2.5.3] - 2025-10-22
 
 ## Changed

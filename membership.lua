@@ -717,6 +717,7 @@ local function leave()
         uri = advertise_uri,
         status = opts.LEFT,
         incarnation = myself.incarnation,
+        payload = myself.payload,
         ttl = members.count(),
     })
     local msg_msgpacked = msgpack.encode({advertise_uri, 'LEAVE', msgpack.NULL, {event}})
