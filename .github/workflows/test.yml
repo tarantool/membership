@@ -30,13 +30,13 @@ jobs:
         id: cache-rocks
         with:
           path: .rocks/
-          key: cache-rocks-${{ matrix.tarantool }}-${{ hashFiles('membership-scm-1.rockspec') }}
+          key: cache-rocks-${{ matrix.tarantool }}-${{ hashFiles('membership-scm-1.rockspec') }}-02
       
       - name: Install dependencies
         if: steps.cache-rocks.outputs.cache-hit != 'true'
         run: |
           tarantoolctl rocks install luacheck
-          tarantoolctl rocks install luatest
+          tarantoolctl rocks install luatest 1.0.1
           tarantoolctl rocks install ldoc --server=https://tarantool.github.io/LDoc/
 
       - name: Add rocks to PATH
